@@ -5,6 +5,8 @@ from copy import deepcopy
 import streamlit as st
 
 from objectivity.examples import EXAMPLE_CONTEXT, EXAMPLE_SCENARIO
+from objectivity.evaluation import evaluate
+from objectivity.evaluation_ui import render_findings
 from objectivity.models import (
     INTEREST_OPTIONS,
     PRESSURE_OPTIONS,
@@ -14,16 +16,26 @@ from objectivity.models import (
     Question,
 )
 from objectivity.questions import (
+    QUESTION_BANK,
     confirm_context,
     eligible_questions,
     next_question,
     save_answer,
+)
+from objectivity.review import (
+    REVIEW_QUESTIONS,
+    ReviewState,
+    eligible_review_questions,
+    next_review_question,
+    save_review_answer,
+    sync_review,
 )
 
 
 def _navigate(view: str) -> None:
     st.session_state.view = view
     st.session_state.edit_answer_id = None
+    st.session_state.edit_review_id = None
     # A new widget generation prevents stale form values after edits/navigation.
     st.session_state.widget_generation += 1
     st.rerun()
@@ -34,7 +46,7 @@ def _key(name: str) -> str:
 
 
 def _scenario_view(assessment: Assessment) -> None:
-    st.caption("Step 1 of 3 · Describe your scenario")
+    st.caption("Step 1 of 4 · Describe your scenario")
     st.subheader("What situation would you like to explore?")
     st.write(
         "Describe the professional decision and the circumstances that concern you. "
@@ -62,7 +74,7 @@ def _scenario_view(assessment: Assessment) -> None:
 
 
 def _context_view(assessment: Assessment) -> None:
-    st.caption("Step 2 of 3 · Confirm the context")
+    st.caption("Step 2 of 4 · Confirm the context")
     st.subheader("Check the details that will guide the questions")
     if st.session_state.get("example_loaded"):
         st.info(
@@ -163,11 +175,15 @@ def _context_review(assessment: Assessment) -> None:
         )
 
 
-def _answer_form(assessment: Assessment, question: Question, editing: bool) -> None:
+def _answer_form(
+    assessment: Assessment, question: Question, editing: bool,
+    review_state: ReviewState | None = None,
+) -> None:
     st.subheader("Edit a previous answer" if editing else question.topic)
     with st.expander("Why this question?"):
         st.write(question.why)
-    previous = assessment.answers.get(question.id) if editing else None
+    answers = review_state.answers if review_state is not None else assessment.answers
+    previous = answers.get(question.id) if editing else None
     with st.form(f"answer_{question.id}_{st.session_state.widget_generation}"):
         choice = st.radio(
             question.prompt, question.options,
@@ -189,35 +205,49 @@ def _answer_form(assessment: Assessment, question: Question, editing: bool) -> N
             st.warning("Please choose an option, including Unknown if needed.")
         else:
             try:
-                save_answer(assessment, question.id, choice, explanation)
+                if review_state is None:
+                    save_answer(assessment, question.id, choice, explanation)
+                else:
+                    save_review_answer(assessment, review_state, question.id, choice, explanation)
             except ValueError as error:
                 st.warning(str(error))
             else:
-                _navigate("questions")
+                _navigate("review" if review_state is not None else "questions")
     if editing and st.button("Cancel answer edit"):
-        _navigate("questions")
+        _navigate("review" if review_state is not None else "questions")
 
 
-def _answer_review(assessment: Assessment, questions: list[Question]) -> None:
-    answered = [question for question in questions if question.id in assessment.answers]
-    with st.expander(f"Review previous answers ({len(answered)})"):
+def _answer_review(
+    assessment: Assessment, questions: list[Question], review_state: ReviewState | None = None,
+) -> None:
+    answers = review_state.answers if review_state is not None else assessment.answers
+    answered = [question for question in questions if question.id in answers]
+    title = "Review evaluation answers" if review_state is not None else "Review previous answers"
+    with st.expander(f"{title} ({len(answered)})"):
         if not answered:
             st.caption("Your saved answers will appear here.")
             return
         by_id = {question.id: question for question in answered}
         selected_id = st.selectbox(
-            "Choose an answer to review", list(by_id),
+            "Choose an evaluation answer to review" if review_state is not None else "Choose an answer to review",
+            list(by_id),
             format_func=lambda question_id: by_id[question_id].prompt,
-            key=_key("review_selection"),
+            key=_key("evaluation_selection" if review_state is not None else "review_selection"),
         )
-        answer = assessment.answers[selected_id]
+        answer = answers[selected_id]
         st.write("**Selected answer**")
         st.text(answer.choice)
         if answer.explanation:
             st.write("**Your explanation — not automatically interpreted**")
             st.text(answer.explanation)
-        if st.button("Edit selected answer"):
-            st.session_state.edit_answer_id = selected_id
+        if st.button("Edit selected evaluation answer" if review_state is not None else "Edit selected answer"):
+            if review_state is None:
+                st.session_state.edit_answer_id = selected_id
+                st.session_state.edit_review_id = None
+                st.session_state.view = "questions"
+            else:
+                st.session_state.edit_review_id = selected_id
+                st.session_state.edit_answer_id = None
             st.session_state.widget_generation += 1
             st.rerun()
         st.caption(
@@ -227,7 +257,7 @@ def _answer_review(assessment: Assessment, questions: list[Question]) -> None:
 
 
 def _questions_view(assessment: Assessment) -> None:
-    st.caption("Step 3 of 3 · Guided clarification")
+    st.caption("Step 3 of 4 · Guided clarification")
     questions = eligible_questions(assessment)
     count = sum(question.id in assessment.answers for question in questions)
     st.progress(
@@ -245,25 +275,60 @@ def _questions_view(assessment: Assessment) -> None:
         st.info(
             "You have answered all questions currently selected by the rules. "
             "This does not establish that any threat is acceptable or that the facts are verified. "
-            "Threat evaluations, safeguard conclusions and assessment reports are not included "
-            "in this release."
+            "Continue to review potential threats and provisional significance reasoning. "
+            "Safeguard conclusions and assessment reports are not included in this release."
         )
         st.write("Review your answers or edit the context when new information becomes available.")
+        if st.button("Review potential threats"):
+            _navigate("review")
     _answer_review(assessment, questions)
-    if assessment.archive:
-        with st.expander(f"Superseded answers ({len(assessment.archive)})"):
+    _answer_history(assessment.archive, QUESTION_BANK, "Superseded answers")
+
+
+def _answer_history(archive, bank: dict[str, Question], title: str) -> None:
+    if archive:
+        with st.expander(f"{title} ({len(archive)})"):
             st.caption(
                 "Retained for reference only; excluded from current question selection and "
                 "progress. If a question returns, please answer it again using the current context."
             )
-            from objectivity.questions import QUESTION_BANK
-
-            for record in assessment.archive:
+            for record in archive:
                 st.write(f"**Revision {record.revision} · {record.reason}**")
-                st.text(QUESTION_BANK[record.question_id].prompt)
+                st.text(bank[record.question_id].prompt)
                 st.text(record.answer.choice)
                 if record.answer.explanation:
                     st.text(record.answer.explanation)
+
+
+def _review_view(assessment: Assessment, state: ReviewState) -> None:
+    st.caption("Step 4 of 4 · Identify and evaluate")
+    st.subheader("Review potential threats")
+    if not assessment.confirmed or next_question(assessment) is not None:
+        st.info("The earlier clarification has changed. Complete the relevant questions before reviewing.")
+        if st.button("Return to clarification"):
+            _navigate("questions")
+        return
+    st.write(
+        "These are provisional findings from your structured account, not proof of bias "
+        "or misconduct. Findings are recalculated when you edit the supporting information."
+    )
+    _context_review(assessment)
+    questions = eligible_review_questions(assessment, state)
+    edit_id = st.session_state.get("edit_review_id")
+    question = next((q for q in questions if q.id == edit_id), None) if edit_id else next_review_question(assessment, state)
+    if question:
+        st.info("An additional point needs clarification. You can review the conditional reasoning below while answering.")
+        _answer_form(assessment, question, editing=bool(edit_id), review_state=state)
+    else:
+        st.caption("No further evaluation questions are currently selected. Uncertainties may remain.")
+    render_findings(evaluate(assessment, state.answers))
+    st.divider()
+    _answer_review(assessment, questions, review_state=state)
+    _answer_review(assessment, eligible_questions(assessment))
+    _answer_history(assessment.archive, QUESTION_BANK, "Superseded answers")
+    _answer_history(state.archive, REVIEW_QUESTIONS, "Superseded evaluation answers")
+    if st.button("Return to clarification"):
+        _navigate("questions")
 
 
 def render_app() -> None:
@@ -273,6 +338,8 @@ def render_app() -> None:
         st.session_state.view = "scenario"
         st.session_state.edit_answer_id = None
         st.session_state.widget_generation = 0
+    if "review_state" not in st.session_state:
+        st.session_state.review_state = ReviewState()
     st.title("Objectivity Ethics Assistant")
     st.write(
         "Explore circumstances that may affect objective professional judgment through "
@@ -284,7 +351,7 @@ def render_app() -> None:
     )
     with st.sidebar:
         st.subheader("Your session")
-        st.write("Describe → Confirm → Clarify")
+        st.write("Describe → Confirm → Clarify → Review")
         st.caption(
             "Progress is kept in this Streamlit session, not saved to a database. "
             "Refreshing, reconnecting or restarting the server may lose it. "
@@ -302,9 +369,12 @@ def render_app() -> None:
                 st.session_state.reset_pending = False
                 st.rerun()
     assessment = st.session_state.assessment
+    sync_review(assessment, st.session_state.review_state)
     if st.session_state.view == "scenario":
         _scenario_view(assessment)
     elif st.session_state.view == "context":
         _context_view(assessment)
+    elif st.session_state.view == "review":
+        _review_view(assessment, st.session_state.review_state)
     else:
         _questions_view(assessment)
