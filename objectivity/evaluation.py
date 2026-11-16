@@ -32,7 +32,7 @@ UNSUPPORTED_BASES = {
     ),
     "A proposed safeguard": (
         "A proposed safeguard has not been shown effective merely by being proposed. "
-        "This phase does not assess safeguard sufficiency."
+        "This initial evaluation does not assess safeguard sufficiency; the Address stage examines the recorded action evidence."
     ),
 }
 
@@ -353,7 +353,7 @@ def evaluate(
         (
             "Scenario narrative is a reported account; confirmed context and recorded answers remain user-provided, not independently verified evidence. No independently verified evidence has been obtained by this app.",
             "Only Objectivity is considered. For audit-related work, separate audit-independence and non-assurance-service requirements need their own assessment.",
-            "The Identify, Evaluate, Address conceptual framework informs this design. This phase does not implement the Address stage or determine whether safeguards are sufficient.",
+            "The Identify, Evaluate, Address conceptual framework informs this design. This initial evaluation precedes the separate Address stage and does not establish safeguard sufficiency.",
             "These are authored implementation rules, not ACCA/IESBA approval, professional validation or a complete application of all applicable requirements. Professional judgment remains necessary.",
         ),
     )

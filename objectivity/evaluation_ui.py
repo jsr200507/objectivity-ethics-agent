@@ -55,7 +55,7 @@ def render_findings(evaluation: Evaluation) -> None:
         st.write(
             "The conceptual framework is Identify, Evaluate, Address. This release "
             "identifies potential threats and provisionally evaluates significance. "
-            "Addressing threats and assessing safeguards belong to a later phase; "
+            "Continue to the Address stage to examine actual actions and their effectiveness; "
             "an action-required outcome is not a finding of proven bias or misconduct."
         )
         st.write(
