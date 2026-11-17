@@ -5,6 +5,8 @@ from copy import deepcopy
 import streamlit as st
 
 from objectivity.examples import EXAMPLE_CONTEXT, EXAMPLE_SCENARIO
+from objectivity.address import AddressState, sync_address
+from objectivity.address_ui import render_address, render_report
 from objectivity.evaluation import evaluate
 from objectivity.evaluation_ui import render_findings
 from objectivity.models import (
@@ -36,6 +38,7 @@ def _navigate(view: str) -> None:
     st.session_state.view = view
     st.session_state.edit_answer_id = None
     st.session_state.edit_review_id = None
+    st.session_state.edit_address_id = None
     # A new widget generation prevents stale form values after edits/navigation.
     st.session_state.widget_generation += 1
     st.rerun()
@@ -46,7 +49,7 @@ def _key(name: str) -> str:
 
 
 def _scenario_view(assessment: Assessment) -> None:
-    st.caption("Step 1 of 4 · Describe your scenario")
+    st.caption("Step 1 of 6 · Describe your scenario")
     st.subheader("What situation would you like to explore?")
     st.write(
         "Describe the professional decision and the circumstances that concern you. "
@@ -74,7 +77,7 @@ def _scenario_view(assessment: Assessment) -> None:
 
 
 def _context_view(assessment: Assessment) -> None:
-    st.caption("Step 2 of 4 · Confirm the context")
+    st.caption("Step 2 of 6 · Confirm the context")
     st.subheader("Check the details that will guide the questions")
     if st.session_state.get("example_loaded"):
         st.info(
@@ -257,7 +260,7 @@ def _answer_review(
 
 
 def _questions_view(assessment: Assessment) -> None:
-    st.caption("Step 3 of 4 · Guided clarification")
+    st.caption("Step 3 of 6 · Guided clarification")
     questions = eligible_questions(assessment)
     count = sum(question.id in assessment.answers for question in questions)
     st.progress(
@@ -276,7 +279,7 @@ def _questions_view(assessment: Assessment) -> None:
             "You have answered all questions currently selected by the rules. "
             "This does not establish that any threat is acceptable or that the facts are verified. "
             "Continue to review potential threats and provisional significance reasoning. "
-            "Safeguard conclusions and assessment reports are not included in this release."
+            "Address actions and report generation follow the evaluation step."
         )
         st.write("Review your answers or edit the context when new information becomes available.")
         if st.button("Review potential threats"):
@@ -301,7 +304,7 @@ def _answer_history(archive, bank: dict[str, Question], title: str) -> None:
 
 
 def _review_view(assessment: Assessment, state: ReviewState) -> None:
-    st.caption("Step 4 of 4 · Identify and evaluate")
+    st.caption("Step 4 of 6 · Identify and evaluate")
     st.subheader("Review potential threats")
     if not assessment.confirmed or next_question(assessment) is not None:
         st.info("The earlier clarification has changed. Complete the relevant questions before reviewing.")
@@ -321,6 +324,8 @@ def _review_view(assessment: Assessment, state: ReviewState) -> None:
         _answer_form(assessment, question, editing=bool(edit_id), review_state=state)
     else:
         st.caption("No further evaluation questions are currently selected. Uncertainties may remain.")
+        if st.button("Address Threats"):
+            _navigate("address")
     render_findings(evaluate(assessment, state.answers))
     st.divider()
     _answer_review(assessment, questions, review_state=state)
@@ -340,6 +345,8 @@ def render_app() -> None:
         st.session_state.widget_generation = 0
     if "review_state" not in st.session_state:
         st.session_state.review_state = ReviewState()
+    if "address_state" not in st.session_state:
+        st.session_state.address_state = AddressState()
     st.title("Objectivity Ethics Assistant")
     st.write(
         "Explore circumstances that may affect objective professional judgment through "
@@ -351,7 +358,7 @@ def render_app() -> None:
     )
     with st.sidebar:
         st.subheader("Your session")
-        st.write("Describe → Confirm → Clarify → Review")
+        st.write("Describe → Confirm → Clarify → Evaluate → Address → Report")
         st.caption(
             "Progress is kept in this Streamlit session, not saved to a database. "
             "Refreshing, reconnecting or restarting the server may lose it. "
@@ -370,11 +377,16 @@ def render_app() -> None:
                 st.rerun()
     assessment = st.session_state.assessment
     sync_review(assessment, st.session_state.review_state)
+    sync_address(assessment, st.session_state.review_state, st.session_state.address_state)
     if st.session_state.view == "scenario":
         _scenario_view(assessment)
     elif st.session_state.view == "context":
         _context_view(assessment)
     elif st.session_state.view == "review":
         _review_view(assessment, st.session_state.review_state)
+    elif st.session_state.view == "address":
+        render_address(assessment, st.session_state.review_state, st.session_state.address_state, _navigate)
+    elif st.session_state.view == "report":
+        render_report(assessment, st.session_state.review_state, st.session_state.address_state, _navigate)
     else:
         _questions_view(assessment)

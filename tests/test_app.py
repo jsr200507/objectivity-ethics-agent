@@ -150,7 +150,7 @@ class AppFlowTests(unittest.TestCase):
         self.answer("Unknown")
         self.assert_complete()
         self.assertEqual(len(self.app.session_state["assessment"].answers), 7)
-        self.assertTrue(any("not included" in item.value for item in self.app.info))
+        self.assertTrue(any("report generation follow" in item.value for item in self.app.info))
 
     def test_no_relevant_routes_does_not_invent_questions(self):
         self.context()
