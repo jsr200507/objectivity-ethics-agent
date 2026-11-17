@@ -7,6 +7,7 @@ import streamlit as st
 from objectivity.examples import EXAMPLE_CONTEXT, EXAMPLE_SCENARIO
 from objectivity.address import AddressState, sync_address
 from objectivity.address_ui import render_address, render_report
+from objectivity.progress_ui import render_save_resume
 from objectivity.evaluation import evaluate
 from objectivity.evaluation_ui import render_findings
 from objectivity.models import (
@@ -347,6 +348,9 @@ def render_app() -> None:
         st.session_state.review_state = ReviewState()
     if "address_state" not in st.session_state:
         st.session_state.address_state = AddressState()
+    assessment = st.session_state.assessment
+    sync_review(assessment, st.session_state.review_state)
+    sync_address(assessment, st.session_state.review_state, st.session_state.address_state)
     st.title("Objectivity Ethics Assistant")
     st.write(
         "Explore circumstances that may affect objective professional judgment through "
@@ -359,25 +363,13 @@ def render_app() -> None:
     with st.sidebar:
         st.subheader("Your session")
         st.write("Describe → Confirm → Clarify → Evaluate → Address → Report")
-        st.caption(
-            "Progress is kept in this Streamlit session, not saved to a database. "
-            "Refreshing, reconnecting or restarting the server may lose it. "
-            "Use anonymised details and avoid confidential information."
-        )
-        if st.button("Start a new scenario"):
-            st.session_state.reset_pending = True
-        if st.session_state.get("reset_pending"):
-            st.warning("Discard this session's scenario and answers?")
-            if st.button("Discard and start again"):
-                for key in list(st.session_state):
-                    del st.session_state[key]
-                st.rerun()
-            if st.button("Keep current scenario"):
-                st.session_state.reset_pending = False
-                st.rerun()
-    assessment = st.session_state.assessment
-    sync_review(assessment, st.session_state.review_state)
-    sync_address(assessment, st.session_state.review_state, st.session_state.address_state)
+        waiting_for_resume = render_save_resume()
+    if waiting_for_resume:
+        if "_progress_intent" in st.session_state:
+            st.info("Completing the confirmed browser save operation. Please wait before changing the assessment.")
+        else:
+            st.info("Choose Resume previous assessment or Start new assessment in Save & Resume. The saved copy has not been overwritten.")
+        return
     if st.session_state.view == "scenario":
         _scenario_view(assessment)
     elif st.session_state.view == "context":

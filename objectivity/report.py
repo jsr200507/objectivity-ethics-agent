@@ -239,7 +239,12 @@ def build_report(assessment: Assessment, review: ReviewState, address: AddressSt
         "judgment and for consulting applicable current requirements.", "",
         "For audit-related work, separate audit-independence and non-assurance-service "
         "requirements may apply and require their own assessment.", "",
-        "Assessment progress is session-only. Downloaded reports are snapshots and may become "
-        "outdated; regenerate them following any material change.", "",
+        "The active assessment runs in session state. When browser saving is available and "
+        "acknowledged, submitted progress can be resumed from that browser; otherwise use "
+        "Download progress and Import progress. Browser storage and exported JSON may contain "
+        "sensitive details: use fictional or anonymised cases. Clearing browser storage or "
+        "private browsing can lose saved progress. No permanent server storage is used. "
+        "Downloaded reports are snapshots and may become outdated; regenerate them following "
+        "any material change.", "",
     ]
     return "\n".join(lines)

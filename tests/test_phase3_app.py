@@ -76,7 +76,10 @@ class AddressAppTests(unittest.TestCase):
         self.assertEqual(self.app.session_state["view"], "report")
         report = next(item.value for item in self.app.markdown if item.value.startswith("# Ethical Assessment Report"))
         self.assertNotRegex(report, r"\b(?:answer|review|context)\.[A-Za-z_]")
-        self.assertEqual(len(self.app.get("download_button")), 1)
+        self.assertEqual(
+            sum(button.proto.label == "Download report (Markdown)" for button in self.app.get("download_button")),
+            1,
+        )
         return report
 
     def proposed_reviews(self):
@@ -255,7 +258,7 @@ class AddressAppTests(unittest.TestCase):
         self.assertIn("No potential threat", self.text())
         report = self.generate_report()
         self.assertIn("not establish that threats are absent", report)
-        self.assertIn("session-only", report)
+        self.assertIn("No permanent server storage", report)
 
     def test_unknown_only_account_is_not_given_acceptability_assurance(self):
         self.neutral_to_address(uncertain=True)
