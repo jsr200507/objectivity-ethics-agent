@@ -11,6 +11,10 @@ residual-threat reasoning and a downloadable Ethical Assessment Report.
 It uses free, open-source packages, with no paid APIs, subscriptions, services or
 API keys. There is no generative AI or independent fact verification.
 
+Save & Resume adds acknowledged browser-local autosave for submitted progress,
+plus validated JSON backups that work without browser storage. The assessment
+rules and the three-phase workflow are unchanged.
+
 ## Run locally
 
 Requires Python 3.10 or newer.
@@ -53,6 +57,9 @@ python -m streamlit run app.py --server.headless true
 8. Select **Generate Ethical Assessment Report**. Review the current conditional
    conclusions and download a Markdown copy. Incomplete information produces an
    interim assessment, not an invented assurance of acceptability.
+9. Use **Download progress** for a portable JSON backup. On reopening the same
+   app in the same browser profile, choose **Resume previous assessment**. Use
+   **Import progress** to restore a JSON backup in another session or browser.
 
 The example's context is authored sample data, not extracted from its narrative.
 For other scenarios, fields start empty or Unknown. Only structured selections
@@ -210,17 +217,84 @@ all relevant threats; familiarity measures must not silently eliminate the
 contract-related pressure or commercial incentive. Generate an interim report,
 edit an earlier answer, and regenerate it to inspect the changed reasoning.
 
-## State and privacy
+## Save & Resume
 
-`st.session_state` holds the confirmed context, current answers, revision number
-and superseded answer history. Saved answers survive ordinary Streamlit reruns.
-Submit forms to save changes; unsaved form drafts are not assessment answers.
-Progress is **not durable** across browser refreshes, disconnections, server
-restarts or deployment updates. There is no database, user account, import/export
-or application-written scenario file. Reports are generated in memory for user-
-initiated download. Use anonymised details and avoid
-entering confidential information. **Start a new scenario** requires confirmation
-before discarding the current session.
+`st.session_state` still holds the active assessment. A small, self-contained
+Streamlit component saves a versioned JSON snapshot to this browser's
+`localStorage` after submitted progress or the workflow stage changes. A save is
+reported as complete only after the browser acknowledges writing and reading
+back that exact snapshot. Nothing relies on session state alone surviving a
+refresh. There is no database, account, paid service, external script or permanent
+server-side assessment file.
+
+When a browser copy exists, **Resume previous assessment** is an explicit choice;
+it is not silently loaded over work already in the current session. Replacing
+current work, importing progress, or starting over requires confirmation.
+**Start new assessment** / **Start a new scenario** clears the saved assessment
+only after confirmation and acknowledgement. A content-free coordination record
+remains; it contains no scenario or answers. If deletion cannot be confirmed, the
+app says so and retains the current assessment.
+
+Each browser save stores the scenario, confirmed or draft context, active answers
+and superseded history from all three phases, supporting-action slots and current
+workflow stage. It excludes widget state, evaluations and reports. Restoration
+validates the records and recomputes dependency signatures, questions, findings
+and reports. Stale conditional answers are retained in history with a notice;
+an incompatible stage moves back to the necessary clarification. New widget
+generations prevent old form selections appearing in a restored assessment.
+
+Only **submitted** progress is saved. Use Continue / Save in forms: unsubmitted
+text and unsaved edits are not included in autosave or export. This feature does
+not add draft-text interpretation or change evidence status.
+
+### Portable backups and validation
+
+**Download progress** exports UTF-8 JSON. **Import progress** first validates it
+without changing current work, then requires confirmation before restoration.
+The format has an application name, schema version and compatible rules version.
+It uses allowlisted fields, structured-choice validation and bounded parsing:
+2 MiB maximum, bounded text/history/action counts and nesting. Duplicate fields,
+nonstandard numbers, unsupported versions, invalid evidence-status claims and
+malformed structures are rejected. There is no pickle, executable evaluation or
+arbitrary object deserialization. Imported conclusions are never accepted.
+
+Corrupt or incompatible browser copies are preserved until an explicit choice
+to clear them. A bounded raw browser-copy download is offered where available.
+JSON import/export remains available if local storage, coordination support or
+the component is blocked. A missing acknowledgement never means a save succeeded.
+
+### Reliability and privacy limits
+
+- Browser autosave requires the locally served component to have a same-origin
+  parent, usable local storage, Web Locks and browser cryptography. It works in
+  the tested Chromium environment. Unsupported or blocked storage falls back to
+  JSON backups; there is no claim that every browser or hosted embedding works.
+- One assessment is saved per browser profile and app origin (scheme, hostname
+  and port). Different origins/profiles do not share it; use JSON to transfer it.
+  Writes and clearing use an exclusive browser lock and a saved-version token.
+  A stale tab cannot silently overwrite a newer copy. The app pauses autosave on
+  conflict and asks which version to keep. A replacement/deletion waiting behind
+  a conflicting autosave is cancelled and needs a fresh confirmation.
+- Browser-local data and exported JSON may contain sensitive scenario details.
+  Use fictional or anonymised cases. Storage is not encrypted or access-controlled
+  by an application account; someone using the same browser profile may read it.
+  Progress sent to the app for processing remains in the active server session,
+  not permanent application storage.
+- Clearing site data, browser policies, storage quotas and private browsing can
+  remove or prevent saves. Private browsing may appear to work until its windows
+  close. Keep a JSON backup of anything important.
+- JSON files are editable records of user accounts, not authenticated evidence
+  or proof that actions or independent checks actually occurred. All professional
+  judgment and verification limitations continue to apply.
+
+The integrated application has been exercised in Chromium through all three
+phases, refresh and explicit resume, closing/reopening a persistent browser
+profile, confirmed clearing, actual JSON download/upload, and stale-tab conflict
+protection. These local tests do not establish that a live hosted deployment has
+been updated or independently tested. Further browser checks restarted the backend
+at the same origin, restored edited safeguard answers and superseded history,
+preserved corrupt copies until confirmed clearing, and verified usable JSON
+downloads when storage was blocked or full.
 
 ## Code structure
 
@@ -235,10 +309,15 @@ before discarding the current session.
 - `objectivity/address.py`: adaptive actions, implementation evidence, residual assessment and invalidation/history.
 - `objectivity/address_ui.py`: Address interaction and live report/download views.
 - `objectivity/report.py`: pure Markdown report generation and natural-language provenance labels.
+- `objectivity/progress.py`: bounded, versioned JSON codec and validated reconstruction of source records.
+- `objectivity/save_state.py`: acknowledgement and saved-version coordination.
+- `objectivity/progress_ui.py`: autosave, resume, confirmation and portable-backup controls.
+- `objectivity/browser_storage.py`, `objectivity/browser_component/index.html`: local vanilla-JavaScript storage bridge, without external assets.
 - `tests/test_engine.py`: pure domain and branching tests.
 - `tests/test_app.py`: Streamlit AppTest interaction tests.
 - `tests/test_evaluation.py`, `tests/test_review.py`, `tests/test_phase2_app.py`: Phase 2 reasoning, follow-up and interaction regressions.
 - `tests/test_address.py`, `tests/test_report.py`, `tests/test_phase3_app.py`: action effectiveness, report and all-phase interaction regressions.
+- `tests/test_progress.py`, `tests/test_save_state.py`, `tests/test_progress_ui.py`, `tests/test_browser_storage.py`: schema, restoration, acknowledgements, UI and storage-bridge regressions.
 
 Questions are selected by explicit conditions on context and prior answers, not a
 fixed questionnaire or keyword matching. Combined circumstances retain all
@@ -259,9 +338,15 @@ AppTest. No additional test dependencies are required. Tests cover distinct and
 combined paths, Unknown/Other handling, validation, rerun persistence, answer and
 context edits, archive invalidation, cancellation and reset. Streamlit may print
 a harmless missing-ScriptRunContext warning when AppTest starts outside a server.
+The browser-bridge tests also run the actual JavaScript in Node when available;
+those specific JavaScript checks skip if Node is absent. Node is not an
+application/runtime dependency. Browser refresh/reopen and real uploads require
+the additional manual or headless-browser checks described above; AppTest alone
+does not establish browser persistence.
 
 The existing Streamlit deployment can retain `app.py` and the unchanged
-`requirements.txt`. Phase 3 adds only standard-library modules and uses the same
-Streamlit dependency. Local startup and tests validate compatibility with the
+`requirements.txt`. Save & Resume adds only standard-library Python modules and
+a locally served component using Streamlit's existing v1 component API. No npm
+build or new Python dependency is required. Local startup and tests validate compatibility with the
 installed runtime; they do not mean changes have been committed, pushed or
 deployed, or establish the status of a live hosted instance.

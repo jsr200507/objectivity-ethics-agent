@@ -1,0 +1,185 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Objectivity browser save status</title>
+  <style>
+    body { margin: 0; padding: 4px 0; font: 12px/20px system-ui, sans-serif; }
+    #status { margin: 0; }
+  </style>
+</head>
+<body>
+  <p id="status" role="status" aria-live="polite">Checking browser save support…</p>
+  <script>
+  "use strict";
+  (() => {
+    const STORAGE_KEY = "objectivity-ethics-assistant.progress.v1";
+    const LOCK_KEY = STORAGE_KEY + ":exclusive";
+    const MAX_BYTES = 2 * 1024 * 1024;
+    const MAX_RECORD_BYTES = 3 * MAX_BYTES;
+    const statusElement = document.getElementById("status");
+    const encoder = new TextEncoder();
+    const completed = new Map();
+    let activeCommandId = null;
+    // This locally served component is permitted to exchange assessment data
+    // only with a same-origin Streamlit parent. Referrer is not an authority:
+    // an unrelated site can iframe this URL and control that referrer.
+    const parentOrigin = window.location.origin;
+    const trustedOrigin = parentOrigin !== "null" && /^https?:\/\//.test(parentOrigin);
+
+    function post(type, extra) {
+      if (trustedOrigin) {
+        window.parent.postMessage({isStreamlitMessage: true, type, ...extra}, parentOrigin);
+      }
+    }
+
+    function status(message) {
+      statusElement.textContent = message;
+    }
+
+    function response(command, fields) {
+      return {id: command.id, op: command.op, token: null, data: null, ...fields};
+    }
+
+    function unavailable(command, error) {
+      let reason = "Reliable browser saving is unavailable. Download progress as JSON instead.";
+      if (error && error.name === "QuotaExceededError") {
+        reason = "Browser storage is full. Download progress as JSON instead.";
+      } else if (error && error.name === "SecurityError") {
+        reason = "This browser is blocking local storage. Download progress as JSON instead.";
+      }
+      return response(command, {status: "unavailable", reason});
+    }
+
+    function validCommand(command) {
+      if (!command || typeof command !== "object" || typeof command.id !== "string" ||
+          !command.id || command.id.length > 200 || !["read", "write", "clear"].includes(command.op)) {
+        return false;
+      }
+      if (command.op !== "read" && command.expected_token !== null &&
+          (typeof command.expected_token !== "string" || command.expected_token.length > 256)) {
+        return false;
+      }
+      return command.op !== "write" || (typeof command.data === "string" &&
+        encoder.encode(command.data).length <= MAX_BYTES);
+    }
+
+    async function corruptRecord(raw) {
+      const hash = await crypto.subtle.digest("SHA-256", encoder.encode(raw));
+      const digest = Array.from(new Uint8Array(hash), value => value.toString(16).padStart(2, "0")).join("");
+      return {
+        token: "corrupt:" + digest, data: null, status: "corrupt",
+        raw: encoder.encode(raw).length <= MAX_BYTES ? raw : null,
+        reason: "Saved browser data is corrupt or incompatible. It has not been overwritten.",
+      };
+    }
+
+    async function readRecord() {
+      const raw = localStorage.getItem(STORAGE_KEY);
+      if (raw === null) return {token: null, data: null, status: "ok"};
+      if (encoder.encode(raw).length > MAX_RECORD_BYTES) return corruptRecord(raw);
+      let record;
+      try { record = JSON.parse(raw); } catch (_) { return corruptRecord(raw); }
+      const keys = record && typeof record === "object" ? Object.keys(record).sort().join(",") : "";
+      if (keys !== "data,last_command_id,token,updated_at,version" || record.version !== 1 ||
+          typeof record.token !== "string" || !record.token || record.token.length > 200 ||
+          typeof record.last_command_id !== "string" || !record.last_command_id || record.last_command_id.length > 200 ||
+          typeof record.updated_at !== "string" || Number.isNaN(Date.parse(record.updated_at)) ||
+          (record.data !== null && (typeof record.data !== "string" || encoder.encode(record.data).length > MAX_BYTES))) {
+        return corruptRecord(raw);
+      }
+      return {...record, status: "ok"};
+    }
+
+    function publicRecord(record) {
+      const result = {token: record.token, data: record.data};
+      if (record.updated_at) result.updated_at = record.updated_at;
+      if (record.raw !== undefined) result.raw = record.raw;
+      return result;
+    }
+
+    async function execute(command) {
+      if (!validCommand(command)) {
+        return response(command || {}, {status: "unavailable", reason: "Invalid browser-save command; use Download progress."});
+      }
+      // Without an exclusive cross-tab lock, never pretend a compare-and-swap
+      // read followed by write is atomic. Keep the safe JSON fallback available.
+      if (!navigator.locks || typeof navigator.locks.request !== "function" ||
+          !crypto.subtle || typeof crypto.randomUUID !== "function") {
+        return unavailable(command);
+      }
+      try {
+        if (command.op === "read") {
+          const record = await readRecord();
+          return response(command, {status: record.status, ...publicRecord(record), reason: record.reason || "Browser storage is available."});
+        }
+        return await navigator.locks.request(LOCK_KEY, {mode: "exclusive"}, async () => {
+          const current = await readRecord();
+          const desiredData = command.op === "clear" ? null : command.data;
+          // A rerender/remount can repeat an already completed command. It must
+          // acknowledge that exact result instead of reporting a false conflict.
+          if (current.status === "ok" && current.last_command_id === command.id && current.data === desiredData) {
+            return response(command, {status: "ok", ...publicRecord(current), reason: command.op === "clear" ? "Saved progress cleared." : "Progress saved in this browser."});
+          }
+          if (command.expected_token !== current.token) {
+            return response(command, {status: "conflict", ...publicRecord(current), reason: "Saved progress changed in another tab. This tab has not overwritten it."});
+          }
+          const record = {
+            version: 1, token: crypto.randomUUID(), data: desiredData,
+            updated_at: new Date().toISOString(), last_command_id: command.id,
+          };
+          const raw = JSON.stringify(record);
+          localStorage.setItem(STORAGE_KEY, raw);
+          if (localStorage.getItem(STORAGE_KEY) !== raw) {
+            return unavailable(command);
+          }
+          // Clear retains only non-sensitive coordination metadata. No scenario,
+          // answers, archive or assessment content remains in this tombstone.
+          return response(command, {status: "ok", ...publicRecord(record), reason: command.op === "clear" ? "Saved progress cleared." : "Progress saved in this browser."});
+        });
+      } catch (error) {
+        return unavailable(command, error);
+      }
+    }
+
+    function emit(entry) {
+      if (!entry.done || entry.sent || activeCommandId !== entry.command.id) return;
+      entry.sent = true;
+      const result = entry.result;
+      status(result.status === "ok" ? result.reason : "Browser autosave needs attention; see save controls.");
+      post("streamlit:setComponentValue", {value: result, dataType: "json"});
+    }
+
+    window.addEventListener("message", event => {
+      if (!trustedOrigin || event.source !== window.parent || event.origin !== parentOrigin ||
+          !event.data || event.data.type !== "streamlit:render") return;
+      const command = event.data.args && event.data.args.command;
+      if (!command || typeof command.id !== "string") return;
+      activeCommandId = command.id;
+      if (event.data.theme) {
+        document.body.style.color = event.data.theme.textColor || "inherit";
+        document.body.style.backgroundColor = event.data.theme.backgroundColor || "transparent";
+      }
+      const existing = completed.get(command.id);
+      if (existing) { emit(existing); return; }
+      const entry = {command, done: false, sent: false, result: null};
+      completed.set(command.id, entry);
+      while (completed.size > 200) completed.delete(completed.keys().next().value);
+      execute(command).then(result => {
+        entry.result = result;
+        entry.done = true;
+        emit(entry);
+      }).catch(() => {
+        entry.result = unavailable(command);
+        entry.done = true;
+        emit(entry);
+      });
+    });
+    if (!trustedOrigin) status("Browser storage requires a trusted application origin; use JSON backup.");
+    post("streamlit:componentReady", {apiVersion: 1});
+    post("streamlit:setFrameHeight", {height: 32});
+  })();
+  </script>
+</body>
+</html>
