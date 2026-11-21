@@ -61,12 +61,39 @@ python -m streamlit run app.py --server.headless true
    app in the same browser profile, choose **Resume previous assessment**. Use
    **Import progress** to restore a JSON backup in another session or browser.
 
-The example's context is authored sample data, not extracted from its narrative.
-For other scenarios, fields start empty or Unknown. Only structured selections
-control routing: free-text scenarios, notes and explanations are retained but not
-automatically interpreted. Confirmation means a user-confirmed account, never
-independent verification. Unknown, Not applicable and Other are valid options;
-Unknown and Other do not become negative findings.
+Step 2 now pre-fills the professional role, relevant parties and roles,
+professional decision/activity, and supported personal relationship using free,
+local English pattern-matching rules. It copies supported wording rather than
+inventing unstated duties, teams or accounting conclusions. Missing, ambiguous
+or unsupported details are **Unknown**. Every field remains editable and requires
+explicit user confirmation before it guides the assessment.
+
+Suggestions are generated when you continue from scenario entry or load the CFO
+example. They are stored as **unconfirmed draft context**, so browser autosave and
+JSON export/import preserve them using the existing format. Reruns, restored
+progress and editing previously confirmed context do not rerun extraction or
+overwrite corrections. If you change the scenario while reviewing Step 2, check
+and update the corresponding fields before confirming; they are not silently
+regenerated. The optional **How were the suggestions obtained?** panel shows the
+matched source fragments and limitations as reference, not verified evidence.
+
+Only the fields you confirm and the subsequent structured selections drive
+threat identification and question selection. Extraction itself does not identify
+a threat, prove a fact or establish misconduct. Confirmation means a user-confirmed
+account, never independent verification. Unknown, Not applicable and Other remain
+valid choices and do not become negative findings.
+
+Commercial interests and pressure still require explicit selections for custom
+scenarios; the CFO sample retains its existing authored selections for those two
+fields. Role, parties, decision and relationship in that sample use the same
+extractor as pasted scenarios. Extra free-text explanations are not automatically
+interpreted as evidence.
+
+This is deliberately limited rule-based assistance, not unrestricted language
+understanding or generative AI. Unfamiliar roles/phrasing, competing statements,
+negation and third-party relationships can leave Unknown values requiring manual
+clarification. Always check the suggestions. No new dependencies, external model,
+paid API or API key are required.
 
 Progress shows answered questions among those currently applicable. The total
 can grow or shrink as answers change. "Current clarification complete" means
@@ -111,7 +138,9 @@ the same underlying event as independent corroboration.
 The reasonable and informed third party test is explained and applied
 conditionally to the account. No actual independent third party reviews the
 case. Context is a **user-confirmed account**, selected answers are **recorded
-user answers**, and the narrative is a **reported account** that is not parsed.
+user answers**, and the narrative is a **reported account**. Limited extraction
+only proposes context before confirmation; ethical reasoning does not otherwise
+interpret the narrative.
 No independently verified evidence has been obtained by the app.
 
 If responsibility was already asked in Phase 1, it is reused, including an
@@ -204,7 +233,7 @@ file is a revision-specific snapshot and must be regenerated after changes.
 
 ### Try the CFO scenario through all phases
 
-Load the example, confirm its authored context, and answer the Phase 1 questions:
+Load the example, review and confirm the context, and answer the Phase 1 questions:
 implied pressure; loss of a contract; no changed work; frequent personal contact;
 supervision/review responsibility; contract renewal; unknown commercial
 dependence. Review the three potential threats and record whether any claim is
@@ -302,6 +331,7 @@ downloads when storage was blocked or full.
 - `objectivity/models.py`: context, answers and revision history, independent of Streamlit.
 - `objectivity/questions.py`: conditional question bank, selection and invalidation rules.
 - `objectivity/examples.py`: editable, authored CFO example.
+- `objectivity/extraction.py`: conservative local suggestions and exact source matches for Step 2.
 - `objectivity/ui.py`: Streamlit forms, progress and review views.
 - `objectivity/evaluation.py`: pure, deterministic threat/significance reasoning and evidence links.
 - `objectivity/review.py`: conditional evaluation questions and review-answer invalidation/history.
@@ -318,6 +348,7 @@ downloads when storage was blocked or full.
 - `tests/test_evaluation.py`, `tests/test_review.py`, `tests/test_phase2_app.py`: Phase 2 reasoning, follow-up and interaction regressions.
 - `tests/test_address.py`, `tests/test_report.py`, `tests/test_phase3_app.py`: action effectiveness, report and all-phase interaction regressions.
 - `tests/test_progress.py`, `tests/test_save_state.py`, `tests/test_progress_ui.py`, `tests/test_browser_storage.py`: schema, restoration, acknowledgements, UI and storage-bridge regressions.
+- `tests/test_extraction.py`, `tests/test_context_prefill_app.py`: supported/ambiguous context extraction, confirmation, editable fields and persistence regressions.
 
 Questions are selected by explicit conditions on context and prior answers, not a
 fixed questionnaire or keyword matching. Combined circumstances retain all

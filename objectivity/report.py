@@ -103,8 +103,9 @@ def build_report(assessment: Assessment, review: ReviewState, address: AddressSt
         "change; an earlier download does not update automatically.", "",
         "## 1. Scenario and confirmed context", "",
         "### Reported scenario", "", _quote(assessment.scenario), "",
-        "The narrative is reported information. It has not been automatically interpreted or "
-        "independently verified.", "",
+        "The narrative is reported information. Limited local rules may have suggested context "
+        "fields before user confirmation; this report relies on the recorded structured account. "
+        "The narrative has not been independently verified or understood as unrestricted text.", "",
     ]
     lines += [
         "### User-confirmed context" if assessment.confirmed else "### Context awaiting confirmation", "",

@@ -65,18 +65,20 @@ class AppFlowTests(unittest.TestCase):
         self.assertTrue(self.app.warning)
         self.assertEqual(self.app.session_state["view"], "scenario")
 
-    def test_narrative_not_extracted_and_confirmation_required(self):
-        self.app.text_area[0].input("My friend the CFO threatened to cancel a contract.")
+    def test_incomplete_scenario_prefills_unknown_and_confirmation_required(self):
+        self.app.text_area[0].input("There is a difficult situation. More information is needed.")
         self.click("Continue to context confirmation")
-        self.assertEqual(self.app.text_input[0].value, "")
+        self.assertEqual(self.app.text_input[0].value, "Unknown")
+        self.assertEqual(self.widget("text_area", "Relevant parties and their roles").value, "Unknown")
+        self.assertEqual(self.widget("text_area", "Professional decision or activity").value, "Unknown")
         self.assertEqual([s.value for s in self.app.selectbox], ["Unknown"] * 3)
         self.click("Confirm context and continue")
         self.assertTrue(self.app.warning)
         self.assertFalse(self.app.session_state["assessment"].confirmed)
         self.app.checkbox[0].check()
         self.click("Confirm context and continue")
-        self.assertTrue(self.app.warning)
-        self.assertFalse(self.app.session_state["assessment"].confirmed)
+        self.assertTrue(self.app.session_state["assessment"].confirmed)
+        self.assertEqual(self.app.session_state["view"], "questions")
 
     def test_familiarity_path_and_edit_reselects_dependent_questions(self):
         self.context(relationship="Close personal relationship")
