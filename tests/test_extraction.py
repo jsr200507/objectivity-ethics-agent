@@ -31,7 +31,10 @@ class ExtractionTests(unittest.TestCase):
         self.assertEqual(result.context.role, "Financial accountant at a manufacturing company")
         self.assertIn("Finance director", result.context.parties)
         self.assertEqual(result.context.decision, "Inventory write-down")
-        self.assertEqual(result.context.relationship, "Unknown")
+        self.assertEqual(result.context.relationship, "Other")
+        self.assertIn("professional", result.context.relationship_notes.lower())
+        self.assertEqual(result.context.interests, "Commercial interest")
+        self.assertEqual(result.context.pressure, "Reported pressure or threatened consequences")
 
     def test_inventory_verb_phrases_preserve_stated_words_and_modifiers(self):
         for phrase in (
@@ -73,13 +76,14 @@ class ExtractionTests(unittest.TestCase):
     def test_extraction_does_not_confirm_or_verify_anything(self):
         result = extract_context(EXAMPLE_SCENARIO)
         self.assertEqual(result.context.basis, DEFAULT_BASIS)
-        self.assertEqual(result.context.interests, "Unknown")
-        self.assertEqual(result.context.pressure, "Unknown")
+        self.assertEqual(result.context.interests, "Commercial interest")
+        self.assertEqual(result.context.pressure, "Reported pressure or threatened consequences")
+        self.assertIn("not", result.context.pressure_notes.lower())
         self.assertTrue(any("not independently verified" in text for text in result.limitations))
 
     def test_missing_details_are_unknown(self):
         context = extract_context("Something concerns me at work.").context
-        for field in ("role", "parties", "decision", "relationship"):
+        for field in ("role", "parties", "decision", "relationship", "interests", "pressure"):
             self.assertEqual(getattr(context, field), "Unknown")
 
     def test_empty_scenario_is_safe(self):
@@ -120,9 +124,10 @@ class ExtractionTests(unittest.TestCase):
         result = extract_context("I am a Financial Accountant. My role is financial accountant.")
         self.assertEqual(result.context.role, "Financial accountant")
 
-    def test_competing_professional_decisions_are_unknown(self):
+    def test_joint_professional_activities_are_both_retained(self):
         result = extract_context("I am an auditor. The issue concerns revenue recognition and inventory write-down.")
-        self.assertEqual(result.context.decision, "Unknown")
+        self.assertIn("Revenue recognition", result.context.decision)
+        self.assertIn("Inventory write-down", result.context.decision)
 
     def test_role_negation_does_not_turn_counterpart_into_user(self):
         result = extract_context("I am not an audit manager. My CFO wants an audit opinion.")
@@ -156,13 +161,16 @@ class ExtractionTests(unittest.TestCase):
         self.assertEqual(result.context.role, "Unknown")
 
     def test_third_party_friendship_is_not_users_relationship(self):
-        for text in (
-            "I am an auditor. The CFO is the CEO's close friend.",
-            "I am an auditor. The CFO, a close friend of the CEO, asked for help.",
-            "I am an auditor. The CFO is my manager's close friend.",
+        for text, expected in (
+            ("I am an auditor. The CFO is the CEO's close friend.", "Unknown"),
+            ("I am an auditor. The CFO, a close friend of the CEO, asked for help.", "Unknown"),
+            ("I am an auditor. The CFO is my manager's close friend.", "Other"),
         ):
             with self.subTest(text=text):
-                self.assertEqual(extract_context(text).context.relationship, "Unknown")
+                result = extract_context(text).context
+                self.assertEqual(result.relationship, expected)
+                if result.relationship == "Other":
+                    self.assertIn("professional", result.relationship_notes.lower())
 
     def test_friend_manager_and_spouses_colleague_are_not_direct_relations(self):
         for scenario in (

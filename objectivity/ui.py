@@ -2,8 +2,9 @@
 
 import streamlit as st
 
-from objectivity.examples import EXAMPLE_CONTEXT, EXAMPLE_SCENARIO
+from objectivity.examples import EXAMPLE_SCENARIO
 from objectivity.extraction import extract_context
+from objectivity.context_suggestions import SUGGESTED_FIELDS, apply_suggestions
 from objectivity.address import AddressState, sync_address
 from objectivity.address_ui import render_address, render_report
 from objectivity.progress_ui import render_save_resume
@@ -57,12 +58,6 @@ def _scenario_view(assessment: Assessment) -> None:
     )
     if st.button("Load CFO / revenue recognition example"):
         suggested = extract_context(EXAMPLE_SCENARIO).context
-        # The sample retains its authored interest/pressure selections. The four
-        # requested context fields come from the same local rules as other cases.
-        suggested.interests = EXAMPLE_CONTEXT.interests
-        suggested.interests_notes = EXAMPLE_CONTEXT.interests_notes
-        suggested.pressure = EXAMPLE_CONTEXT.pressure
-        suggested.pressure_notes = EXAMPLE_CONTEXT.pressure_notes
         st.session_state.assessment = Assessment(
             scenario=EXAMPLE_SCENARIO, context=suggested
         )
@@ -90,8 +85,7 @@ def _context_view(assessment: Assessment) -> None:
     st.subheader("Check the details that will guide the questions")
     if st.session_state.get("example_loaded"):
         st.info(
-            "Local rules pre-filled the role, parties, decision and relationship from the example. "
-            "The example also supplies editable interest and pressure selections. "
+            "The example uses the same local extraction rules as any pasted scenario. "
             "All of these details still need your confirmation."
         )
     if not assessment.confirmed:
@@ -111,21 +105,18 @@ def _context_view(assessment: Assessment) -> None:
     if not assessment.confirmed:
         with st.expander("How were the suggestions obtained?"):
             st.write(
-                "A limited set of English patterns recognises explicit roles, parties, activities "
-                "and relationships. It does not understand unrestricted narratives or infer ethical "
+                "Local English rules recognise roles, parties, activities, relationships, incentives "
+                "and reported pressure, with supporting excerpts. They do not understand unrestricted narratives or infer ethical "
                 "findings. Saved draft fields may also contain your own edits."
             )
             matched = extract_context(assessment.scenario)
-            for field, label in (
-                ("role", "Professional role"), ("parties", "Relevant parties"),
-                ("decision", "Professional decision"), ("relationship", "Relationship"),
-            ):
+            for field, label in SUGGESTED_FIELDS.items():
                 st.write(f"**{label} — matches in the saved scenario**")
                 sources = matched.evidence.get(field, ())
                 st.text("; ".join(sources) if sources else "Unknown — no sufficiently clear supported match.")
             for limitation in matched.limitations:
                 st.caption(limitation)
-            st.caption("Commercial interests and pressure still require your explicit selections outside the supplied example.")
+            st.caption("Every suggestion remains editable. A financial incentive or request is not itself a finding of bias or misconduct.")
     context = assessment.context
     with st.form("context_confirmation"):
         scenario = st.text_area(
@@ -168,28 +159,96 @@ def _context_view(assessment: Assessment) -> None:
             "This is not independent verification.",
             key=_key("confirmed"),
         )
+        preview_requested = st.form_submit_button("Preview fresh suggestions")
         submitted = st.form_submit_button("Confirm context and continue")
+    draft = Context(
+        role=role, parties=parties, decision=decision, relationship=relationship,
+        interests=interests, pressure=pressure, relationship_notes=relationship_notes,
+        interests_notes=interests_notes, pressure_notes=pressure_notes,
+    )
+    if preview_requested:
+        if not scenario.strip():
+            st.warning("Enter a scenario before requesting suggestions.")
+        else:
+            st.session_state["_context_preview_counter"] = st.session_state.get("_context_preview_counter", 0) + 1
+            st.session_state["_context_suggestion_preview"] = {
+                "scenario": scenario, "draft": draft, "result": extract_context(scenario),
+                "generation": st.session_state.widget_generation,
+                "counter": st.session_state["_context_preview_counter"],
+            }
     if submitted:
         if not confirmed:
             st.warning("Please confirm the context before continuing.")
         else:
             try:
                 confirm_context(
-                    assessment, scenario,
-                    Context(
-                        role=role, parties=parties, decision=decision,
-                        relationship=relationship, interests=interests, pressure=pressure,
-                        relationship_notes=relationship_notes,
-                        interests_notes=interests_notes, pressure_notes=pressure_notes,
-                    ),
+                    assessment, scenario, draft,
                 )
             except ValueError as error:
                 st.warning(str(error))
             else:
                 st.session_state.example_loaded = False
+                st.session_state.pop("_context_suggestion_preview", None)
                 _navigate("questions")
+    _context_suggestion_preview(assessment)
     if assessment.confirmed and st.button("Cancel context edit"):
         _navigate("questions")
+
+
+def _context_suggestion_preview(assessment: Assessment) -> None:
+    preview = st.session_state.get("_context_suggestion_preview")
+    if preview and preview["generation"] != st.session_state.widget_generation:
+        st.session_state.pop("_context_suggestion_preview", None)
+        preview = None
+    notice = st.session_state.get("_context_suggestion_notice")
+    if notice and notice[0] == st.session_state.widget_generation:
+        st.info(notice[1])
+    if not preview:
+        return
+    result = preview["result"]
+    st.subheader("Preview refreshed context suggestions")
+    st.caption("Preview only: the last submitted scenario is shown below. No assessment fields or answers have been replaced yet.")
+    st.text(preview["scenario"])
+    for field, label in SUGGESTED_FIELDS.items():
+        st.write(f"**{label}**")
+        st.text(getattr(result.context, field))
+        for excerpt in result.evidence.get(field, ()):
+            st.text(f"Source: {excerpt}")
+    for limitation in result.limitations:
+        st.caption(limitation)
+    defaults = [
+        field for field in SUGGESTED_FIELDS
+        if getattr(preview["draft"], field).strip() in {"", "Unknown"}
+        and getattr(result.context, field) != "Unknown"
+    ]
+    selected = st.multiselect(
+        "Fields to replace", list(SUGGESTED_FIELDS), default=defaults,
+        format_func=lambda field: SUGGESTED_FIELDS[field],
+        key=_key(f"suggestion_fields_{preview['counter']}"),
+    )
+    acknowledged = st.checkbox(
+        "Replace the selected fields and require context confirmation again",
+        key=_key(f"suggestion_ack_{preview['counter']}"),
+    )
+    st.caption("Applying saves the submitted context as an unconfirmed draft. Existing assessment answers move to history and must be reconsidered; unselected fields retain the submitted form values.")
+    if st.button("Apply selected suggestions as draft", disabled=not acknowledged):
+        try:
+            changed = apply_suggestions(
+                assessment, preview["scenario"], preview["draft"], result.context, selected,
+            )
+        except ValueError as error:
+            st.warning(str(error))
+        else:
+            st.session_state.pop("_context_suggestion_preview", None)
+            message = (
+                "Selected suggestions saved as an unconfirmed draft. Review and confirm the context again."
+                if changed else "The selected suggestions did not change the recorded context."
+            )
+            st.session_state["_context_suggestion_notice"] = (st.session_state.widget_generation + 1, message)
+            _navigate("context")
+    if st.button("Cancel suggestion preview"):
+        st.session_state.pop("_context_suggestion_preview", None)
+        st.rerun()
 
 
 def _context_review(assessment: Assessment) -> None:
