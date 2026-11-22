@@ -61,21 +61,27 @@ python -m streamlit run app.py --server.headless true
    app in the same browser profile, choose **Resume previous assessment**. Use
    **Import progress** to restore a JSON backup in another session or browser.
 
-Step 2 now pre-fills the professional role, relevant parties and roles,
-professional decision/activity, and supported personal relationship using free,
-local English pattern-matching rules. It copies supported wording rather than
-inventing unstated duties, teams or accounting conclusions. Missing, ambiguous
-or unsupported details are **Unknown**. Every field remains editable and requires
-explicit user confirmation before it guides the assessment.
+Step 2 pre-fills all six context fields using free, local English rules: the
+professional role, relevant people/groups/organisations and roles, professional
+activities, relationships, financial/performance incentives and reported pressure.
+Title and actor patterns combine with professional-action, ownership, incentive
+and request/consequence rules; there are no complete-scenario lookup answers.
+The optional **How were the suggestions obtained?** panel shows literal source
+excerpts for every supported field. Missing, ambiguous or conflicting details
+remain **Unknown**. Every suggestion remains editable and requires explicit user
+confirmation before it guides the assessment.
 
 Suggestions are generated when you continue from scenario entry or load the CFO
 example. They are stored as **unconfirmed draft context**, so browser autosave and
 JSON export/import preserve them using the existing format. Reruns, restored
-progress and editing previously confirmed context do not rerun extraction or
-overwrite corrections. If you change the scenario while reviewing Step 2, check
-and update the corresponding fields before confirming; they are not silently
-regenerated. The optional **How were the suggestions obtained?** panel shows the
-matched source fragments and limitations as reference, not verified evidence.
+progress and editing previously confirmed context do not overwrite corrections.
+Use **Preview fresh suggestions** in Step 2 to extract from an edited scenario
+or revisit an older saved assessment. The preview changes nothing until you
+select fields and explicitly acknowledge replacement. Applying saves those
+suggestions as an unconfirmed draft, retains your other submitted fields, and
+archives existing answers for reconsideration. Dependent Phase 2/3 answers and
+conclusions are invalidated by the existing dependency checks. Confirm again to
+continue. An unchanged selection leaves the assessment intact.
 
 Only the fields you confirm and the subsequent structured selections drive
 threat identification and question selection. Extraction itself does not identify
@@ -83,17 +89,46 @@ a threat, prove a fact or establish misconduct. Confirmation means a user-confir
 account, never independent verification. Unknown, Not applicable and Other remain
 valid choices and do not become negative findings.
 
-Commercial interests and pressure still require explicit selections for custom
-scenarios; the CFO sample retains its existing authored selections for those two
-fields. Role, parties, decision and relationship in that sample use the same
-extractor as pasted scenarios. Extra free-text explanations are not automatically
-interpreted as evidence.
+The CFO sample uses the same rules as pasted scenarios for all six fields.
+An explicit professional association is recorded as **Other** with details when
+personal ties are unspecified; a job title does not establish that a relationship
+is exclusively professional. A counterpart's bonus is distinguished from the
+user's financial interest. Career incentives without stated monetary benefit are
+recorded as **Other**, not invented personal financial benefits. An instruction
+to favour a professional outcome can suggest reported pressure, while a routine
+request to assess an issue cannot. No request proves coercion, bias or misconduct.
+Extra free-text answers in subsequent phases are not automatically interpreted.
+
+Personal pay, commissions, shareholdings and explicit financial incentives are
+classified separately from organisational profit targets, fees and other
+commercial interests. Both can be suggested together using the existing **Both
+commercial and personal interests** selection, which retains both clarification
+paths and the existing report/save format. Multiword descriptions such as
+"annual performance bonus" do not change who receives the incentive. A quoted
+counterpart's benefit is not silently assigned to the user.
+
+Reported instructions to defer accounting recognition, conceal information or
+withhold it from auditors and other accountability recipients can suggest
+pressure. Routine requests to assess an issue and protective instructions not to
+conceal it are distinguished where the wording supports that distinction. These
+remain reported instructions, not completed changes, explicit threats, verified
+facts or misconduct findings. Possible future recovery mentioned by a manager
+remains that person's claim.
+
+The suggested activity retains supported requests about accounting timing,
+amount and disclosure alongside the underlying professional work. Parties
+include explicit plural roles and recipients of information, including people
+from whom information would be withheld. Clear generic/descriptive references
+are deduplicated; distinct or ambiguous organisations are not automatically
+treated as the same entity. Auditor type and personal relationships are not
+invented.
 
 This is deliberately limited rule-based assistance, not unrestricted language
-understanding or generative AI. Unfamiliar roles/phrasing, competing statements,
-negation and third-party relationships can leave Unknown values requiring manual
-clarification. Always check the suggestions. No new dependencies, external model,
-paid API or API key are required.
+understanding or generative AI. Unfamiliar roles/phrasing, attribution, pronouns,
+negation and multi-party context can still be missed or misclassified. Multiple
+explicit activities are retained; unresolved alternatives remain Unknown. Source
+excerpts show wording, not verification. Always check the suggestions and their
+scope. No new dependencies, external model, paid API or API key are required.
 
 Progress shows answered questions among those currently applicable. The total
 can grow or shrink as answers change. "Current clarification complete" means
@@ -331,7 +366,10 @@ downloads when storage was blocked or full.
 - `objectivity/models.py`: context, answers and revision history, independent of Streamlit.
 - `objectivity/questions.py`: conditional question bank, selection and invalidation rules.
 - `objectivity/examples.py`: editable, authored CFO example.
-- `objectivity/extraction.py`: conservative local suggestions and exact source matches for Step 2.
+- `objectivity/extraction.py`: six-field suggestion orchestration and bounded-input validation.
+- `objectivity/extraction_entities.py`: local role, person/group/organisation and professional-activity patterns.
+- `objectivity/extraction_signals.py`: scoped relationship, financial/performance incentive and reported-pressure rules.
+- `objectivity/context_suggestions.py`: explicit selective replacement as an unconfirmed draft, retaining history.
 - `objectivity/ui.py`: Streamlit forms, progress and review views.
 - `objectivity/evaluation.py`: pure, deterministic threat/significance reasoning and evidence links.
 - `objectivity/review.py`: conditional evaluation questions and review-answer invalidation/history.
@@ -348,7 +386,9 @@ downloads when storage was blocked or full.
 - `tests/test_evaluation.py`, `tests/test_review.py`, `tests/test_phase2_app.py`: Phase 2 reasoning, follow-up and interaction regressions.
 - `tests/test_address.py`, `tests/test_report.py`, `tests/test_phase3_app.py`: action effectiveness, report and all-phase interaction regressions.
 - `tests/test_progress.py`, `tests/test_save_state.py`, `tests/test_progress_ui.py`, `tests/test_browser_storage.py`: schema, restoration, acknowledgements, UI and storage-bridge regressions.
-- `tests/test_extraction.py`, `tests/test_context_prefill_app.py`: supported/ambiguous context extraction, confirmation, editable fields and persistence regressions.
+- `tests/test_extraction*.py`: supported/ambiguous extraction, paraphrases, literal sources, attribution and negation regressions.
+- `tests/test_context_suggestions.py`, `tests/test_context_prefill_app.py`, `tests/test_general_prefill_app.py`: editable drafts, selective refresh, confirmation, all-phase invalidation, autosave/resume and JSON portability.
+- `tests/test_full_context_extraction_app.py`: full inventory, CFO, procurement and incomplete-scenario regressions, including both interest paths, disclosure instructions, persistence and all-phase reports.
 
 Questions are selected by explicit conditions on context and prior answers, not a
 fixed questionnaire or keyword matching. Combined circumstances retain all

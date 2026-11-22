@@ -102,9 +102,10 @@ class ContextPrefillAppTests(unittest.TestCase):
         self.assertIn("finance director", context.parties.lower())
         self.assertIn("inventory", context.decision.lower())
         self.assertIn("write-down", context.decision.lower())
-        self.assertEqual(context.relationship, "Unknown")
-        self.assertEqual(context.interests, "Unknown")
-        self.assertEqual(context.pressure, "Unknown")
+        self.assertEqual(context.relationship, "Other")
+        self.assertIn("professional", context.relationship_notes.lower())
+        self.assertEqual(context.interests, "Commercial interest")
+        self.assertEqual(context.pressure, "Reported pressure or threatened consequences")
 
     def test_missing_information_is_unknown_and_not_confirmed(self):
         self.begin("I need help with a situation.")
