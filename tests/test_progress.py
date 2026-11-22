@@ -305,7 +305,7 @@ class ProgressValidationTests(unittest.TestCase):
         self.rejects(document)
 
     def test_unknown_versions_are_rejected(self):
-        for field, value in (("format", "another app"), ("schema_version", 2), ("schema_version", True), ("rules_version", "future-rules")):
+        for field, value in (("format", "another app"), ("schema_version", FORMAT_VERSION + 1), ("schema_version", True), ("rules_version", "future-rules")):
             document = self.document()
             document[field] = value
             self.rejects(document)

@@ -38,8 +38,9 @@ python -m streamlit run app.py --server.headless true
 ## Use the assistant
 
 1. Enter a scenario, or choose **Load CFO / revenue recognition example**.
-2. Review the editable role, parties, professional decision, relationship,
-   interests and pressure fields. Confirm that they reflect your account.
+2. Review the suggested context. Answer one focused question at a time for
+   missing or ambiguous details, correct suggestions with the **Edit** controls,
+   then select **Confirm reviewed context**. The complete editor is optional.
 3. Answer the single active follow-up and select **Save and continue**. Use
    **Why this question?** to inspect its trigger and purpose.
 4. Use **Review previous answers** to edit an answer, or **Edit scenario or
@@ -61,19 +62,46 @@ python -m streamlit run app.py --server.headless true
    app in the same browser profile, choose **Resume previous assessment**. Use
    **Import progress** to restore a JSON backup in another session or browser.
 
-Step 2 pre-fills all six context fields using free, local English rules: the
+Step 2 first suggests context using free, local English rules: the
 professional role, relevant people/groups/organisations and roles, professional
 activities, relationships, financial/performance incentives and reported pressure.
 Title and actor patterns combine with professional-action, ownership, incentive
 and request/consequence rules; there are no complete-scenario lookup answers.
 The optional **How were the suggestions obtained?** panel shows literal source
 excerpts for every supported field. Missing, ambiguous or conflicting details
-remain **Unknown**. Every suggestion remains editable and requires explicit user
-confirmation before it guides the assessment.
+remain unresolved until clarified or explicitly recorded as not known. Every
+suggestion remains editable and requires user confirmation before assessment.
+
+The default interface shows a concise summary instead of a mandatory six-field
+form. Only one context question is active. Questions prioritise the role and
+decision, then weak or missing party lists, relationships, financial beneficiaries
+and reported pressure. Known details are retained; a generic title or ambiguous
+beneficiary can prompt a targeted clarification. Unfamiliar job titles and
+activities can be supplied directly without matching a recognised phrase.
+
+**I don't know yet** records a genuine uncertainty, instead of treating an
+extraction failure as an established lack of information. Explicitly answered
+uncertainties are not repeatedly asked. Equivalent structured answers are reused
+in the subsequent clarification stage; new questions about contact, financial
+links, responsibility or consequences still appear when needed.
+
+Financial clarification distinguishes the user's/household's interest, a family
+member's interest, the organisation's interest, and another person's interest.
+Where necessary, a follow-up records the recipient and financial connection.
+A sister's shareholding or a director's consulting fee is not automatically a
+personal benefit for the user. Free-text explanations are kept as the user's
+account, not interpreted as evidence. A family tie does not establish closeness,
+and promotion does not automatically establish a monetary benefit.
+
+Each summary detail can be edited independently. **Edit all context details
+(optional)** retains direct control over all fields, scenario edits and fresh
+suggestion previews. Confirming that complete editor explicitly acknowledges any
+Unknown fields left there. Focused edits require confirmation again and refresh
+dependent assessment answers. User-confirmed accounts remain unverified.
 
 Suggestions are generated when you continue from scenario entry or load the CFO
 example. They are stored as **unconfirmed draft context**, so browser autosave and
-JSON export/import preserve them using the existing format. Reruns, restored
+JSON export/import preserve them together with submitted clarification progress. Reruns, restored
 progress and editing previously confirmed context do not overwrite corrections.
 Use **Preview fresh suggestions** in Step 2 to extract from an edited scenario
 or revisit an older saved assessment. The preview changes nothing until you
@@ -103,7 +131,7 @@ Personal pay, commissions, shareholdings and explicit financial incentives are
 classified separately from organisational profit targets, fees and other
 commercial interests. Both can be suggested together using the existing **Both
 commercial and personal interests** selection, which retains both clarification
-paths and the existing report/save format. Multiword descriptions such as
+paths and report logic. Multiword descriptions such as
 "annual performance bonus" do not change who receives the incentive. A quoted
 counterpart's benefit is not silently assigned to the user.
 
@@ -299,7 +327,8 @@ only after confirmation and acknowledgement. A content-free coordination record
 remains; it contains no scenario or answers. If deletion cannot be confirmed, the
 app says so and retains the current assessment.
 
-Each browser save stores the scenario, confirmed or draft context, active answers
+Each browser save stores the scenario, confirmed or draft context, submitted
+Step 2 clarification records, active answers
 and superseded history from all three phases, supporting-action slots and current
 workflow stage. It excludes widget state, evaluations and reports. Restoration
 validates the records and recomputes dependency signatures, questions, findings
@@ -316,6 +345,11 @@ not add draft-text interpretation or change evidence status.
 **Download progress** exports UTF-8 JSON. **Import progress** first validates it
 without changing current work, then requires confirmation before restoration.
 The format has an application name, schema version and compatible rules version.
+New exports use schema 2 to include context clarification source records.
+Schema 1 backups and browser saves remain importable; they do not acquire
+invented clarification answers or confirmation. The browser storage slot is
+unchanged. Older deployed versions cannot read schema 2 until updated. The
+records contain source answers and dependency bindings, not trusted conclusions.
 It uses allowlisted fields, structured-choice validation and bounded parsing:
 2 MiB maximum, bounded text/history/action counts and nesting. Duplicate fields,
 nonstandard numbers, unsupported versions, invalid evidence-status claims and
@@ -370,6 +404,7 @@ downloads when storage was blocked or full.
 - `objectivity/extraction_entities.py`: local role, person/group/organisation and professional-activity patterns.
 - `objectivity/extraction_signals.py`: scoped relationship, financial/performance incentive and reported-pressure rules.
 - `objectivity/context_suggestions.py`: explicit selective replacement as an unconfirmed draft, retaining history.
+- `objectivity/intake.py`, `objectivity/intake_ui.py`: source-only adaptive context planning, editable summaries and progressive confirmation.
 - `objectivity/ui.py`: Streamlit forms, progress and review views.
 - `objectivity/evaluation.py`: pure, deterministic threat/significance reasoning and evidence links.
 - `objectivity/review.py`: conditional evaluation questions and review-answer invalidation/history.
@@ -389,6 +424,7 @@ downloads when storage was blocked or full.
 - `tests/test_extraction*.py`: supported/ambiguous extraction, paraphrases, literal sources, attribution and negation regressions.
 - `tests/test_context_suggestions.py`, `tests/test_context_prefill_app.py`, `tests/test_general_prefill_app.py`: editable drafts, selective refresh, confirmation, all-phase invalidation, autosave/resume and JSON portability.
 - `tests/test_full_context_extraction_app.py`: full inventory, CFO, procurement and incomplete-scenario regressions, including both interest paths, disclosure instructions, persistence and all-phase reports.
+- `tests/test_intake.py`, `tests/test_intake_progress.py`, `tests/test_progressive_context_app.py`: unfamiliar work, adaptive clarification, beneficiary attribution, genuine uncertainty, edits, schema migration and restoration.
 
 Questions are selected by explicit conditions on context and prior answers, not a
 fixed questionnaire or keyword matching. Combined circumstances retain all

@@ -1,7 +1,7 @@
 """Bounded, versioned JSON progress snapshots; no executable deserialization.
 
 Only user accounts and workflow data are portable. Findings, reports, widget
-state and source signatures are deliberately excluded. Restoring a snapshot
+state and derived evaluation signatures are deliberately excluded. Restoring a snapshot
 revalidates its answers against the live conditional question banks and rebuilds
 the signatures used by the existing invalidation logic.
 """
@@ -17,7 +17,7 @@ from .address import (
 )
 from .models import (
     DEFAULT_BASIS, INTEREST_OPTIONS, PRESSURE_OPTIONS, RELATIONSHIP_OPTIONS,
-    Answer, ArchivedAnswer, Assessment, Context,
+    Answer, ArchivedAnswer, Assessment, Context, ContextClarification,
 )
 from .questions import QUESTION_BANK, confirm_context, eligible_questions, next_question, save_answer
 from .review import (
@@ -27,7 +27,8 @@ from .review import (
 
 
 FORMAT_NAME = "objectivity-ethics-assistant-progress"
-FORMAT_VERSION = 1
+FORMAT_VERSION = 2
+LEGACY_FORMAT_VERSION = 1
 RULES_VERSION = "objectivity-phases-1-3-v1"
 MAX_PROGRESS_BYTES = 2 * 1024 * 1024
 MAX_TEXT_LENGTH = 100_000
@@ -103,6 +104,53 @@ def _answers(value, bank=None) -> dict[str, Answer]:
             raise ProgressError("A saved answer choice is incompatible with the current questions.")
         result[id] = answer
     return result
+
+
+def _context_clarifications(value, assessment: Assessment, warnings: list[str]) -> dict[str, ContextClarification]:
+    """Validate source answers; stale metadata never settles an edited context.
+
+    These tokens only bind a submitted clarification to the account it described.
+    They do not authenticate a fact or act as an ethical conclusion.
+    """
+    from .intake import (
+        INTAKE_IDS, OPTIONS_BY_ID, clarification_fingerprint, validate_clarification,
+    )
+
+    if type(value) is not dict or len(value) > len(INTAKE_IDS):
+        raise ProgressError("Context clarification progress has an unsupported structure or size.")
+    candidates = {}
+    for id, raw_record in value.items():
+        if _text(id, "A context clarification identifier", 100) not in INTAKE_IDS:
+            raise ProgressError("A context clarification is not supported by this application version.")
+        raw_record = _object(raw_record, {"choice", "detail", "fingerprint"}, "A context clarification")
+        choice = _text(raw_record["choice"], "A context clarification choice", 1_000)
+        detail = _text(raw_record["detail"], "A context clarification explanation")
+        fingerprint = _text(raw_record["fingerprint"], "A context clarification source token", 64)
+        if choice not in OPTIONS_BY_ID[id] or re.fullmatch(r"[0-9a-f]{64}", fingerprint) is None:
+            raise ProgressError("A context clarification has an incompatible choice or source token.")
+        candidates[id] = ContextClarification(choice, detail, fingerprint)
+    # Filter source bindings first, then validate dependencies in question
+    # order. JSON key order cannot preserve a beneficiary whose primary source
+    # answer was invalidated by an edit.
+    records = {
+        id: record for id, record in candidates.items()
+        if record.fingerprint == clarification_fingerprint(assessment, id)
+    }
+    stale = len(records) != len(candidates)
+    assessment.context_clarifications = records
+    for id in INTAKE_IDS:
+        if id not in records:
+            continue
+        if id == "beneficiary" and "interests" in candidates and "interests" not in records:
+            records.pop(id)
+            stale = True
+            continue
+        record = records[id]
+        if not validate_clarification(assessment, id, record, check_fingerprint=False):
+            raise ProgressError("A context clarification contradicts the recorded context.")
+    if stale:
+        warnings.append("Some context clarification responses described an earlier account and must be reconsidered.")
+    return records
 
 
 def _address_id(id: str) -> tuple[str, int, str]:
@@ -205,14 +253,20 @@ def _restore_answers(assessment, raw, available, save, archive, warning: str, wa
 def _import_progress(data: str | bytes) -> ProgressSnapshot:
     """Validate and reconstruct a snapshot without touching any existing session."""
     root = _decode(data)
-    if root["format"] != FORMAT_NAME or type(root["schema_version"]) is not int or root["schema_version"] != FORMAT_VERSION:
+    if (
+        root["format"] != FORMAT_NAME or type(root["schema_version"]) is not int
+        or root["schema_version"] not in {LEGACY_FORMAT_VERSION, FORMAT_VERSION}
+    ):
         raise ProgressError("This progress file uses an unsupported format or schema version.")
     if root["rules_version"] != RULES_VERSION:
         raise ProgressError("This progress file requires a different assessment rules version.")
     view = _text(root["view"], "The workflow stage", 40)
     if view not in VIEWS:
         raise ProgressError("The saved workflow stage is not supported.")
-    raw_assessment = _object(root["assessment"], {"scenario", "context", "confirmed", "answers", "archive", "revision"}, "The assessment")
+    assessment_fields = {"scenario", "context", "confirmed", "answers", "archive", "revision"}
+    if root["schema_version"] == FORMAT_VERSION:
+        assessment_fields.add("context_clarifications")
+    raw_assessment = _object(root["assessment"], assessment_fields, "The assessment")
     revision = _integer(raw_assessment["revision"], "The assessment revision")
     scenario = _text(raw_assessment["scenario"], "The scenario")
     if type(raw_assessment["confirmed"]) is not bool:
@@ -233,6 +287,9 @@ def _import_progress(data: str | bytes) -> ProgressSnapshot:
             raise ProgressError("Confirmed progress must include a scenario, role, parties and professional decision.") from error
     assessment.archive = _history(raw_assessment["archive"], QUESTION_BANK, revision)
     warnings: list[str] = []
+    assessment.context_clarifications = _context_clarifications(
+        raw_assessment.get("context_clarifications", {}), assessment, warnings,
+    )
     _restore_answers(
         assessment, phase_one, lambda: eligible_questions(assessment),
         lambda id, answer: save_answer(assessment, id, answer.choice, answer.explanation),
@@ -338,6 +395,9 @@ def import_progress(data: str | bytes) -> ProgressSnapshot:
 def _export_progress(assessment: Assessment, review: ReviewState, address: AddressState, view: str) -> str:
     """Create deterministic JSON from copied state, excluding all derived verdicts."""
     assessment, review, address = deepcopy((assessment, review, address))
+    from .intake import sync_intake
+
+    sync_intake(assessment)
     sync_review(assessment, review)
     sync_address(assessment, review, address)
     root = {
