@@ -1,10 +1,9 @@
 """Streamlit views; all question selection is delegated to the domain engine."""
 
-from copy import deepcopy
-
 import streamlit as st
 
 from objectivity.examples import EXAMPLE_CONTEXT, EXAMPLE_SCENARIO
+from objectivity.extraction import extract_context
 from objectivity.address import AddressState, sync_address
 from objectivity.address_ui import render_address, render_report
 from objectivity.progress_ui import render_save_resume
@@ -57,8 +56,15 @@ def _scenario_view(assessment: Assessment) -> None:
         "You will confirm the relevant details yourself in the next step."
     )
     if st.button("Load CFO / revenue recognition example"):
+        suggested = extract_context(EXAMPLE_SCENARIO).context
+        # The sample retains its authored interest/pressure selections. The four
+        # requested context fields come from the same local rules as other cases.
+        suggested.interests = EXAMPLE_CONTEXT.interests
+        suggested.interests_notes = EXAMPLE_CONTEXT.interests_notes
+        suggested.pressure = EXAMPLE_CONTEXT.pressure
+        suggested.pressure_notes = EXAMPLE_CONTEXT.pressure_notes
         st.session_state.assessment = Assessment(
-            scenario=EXAMPLE_SCENARIO, context=deepcopy(EXAMPLE_CONTEXT)
+            scenario=EXAMPLE_SCENARIO, context=suggested
         )
         st.session_state.example_loaded = True
         _navigate("context")
@@ -74,6 +80,8 @@ def _scenario_view(assessment: Assessment) -> None:
             st.warning("Please enter a scenario before continuing.")
         else:
             assessment.scenario = scenario.strip()
+            assessment.context = extract_context(assessment.scenario).context
+            assessment.confirmed = False
             _navigate("context")
 
 
@@ -82,25 +90,53 @@ def _context_view(assessment: Assessment) -> None:
     st.subheader("Check the details that will guide the questions")
     if st.session_state.get("example_loaded"):
         st.info(
-            "This example includes editable context supplied with the example. "
-            "It was not extracted from the narrative. Please review it before confirming."
+            "Local rules pre-filled the role, parties, decision and relationship from the example. "
+            "The example also supplies editable interest and pressure selections. "
+            "All of these details still need your confirmation."
         )
+    if not assessment.confirmed:
+        st.info(
+            "Unconfirmed draft: initial suggestions use local, rule-based extraction, while saved "
+            "drafts retain their recorded values. "
+            "Missing or uncertain details are marked Unknown. These are suggestions, not verified "
+            "facts or confirmed information. Review, correct or replace every field before confirming."
+        )
+    else:
+        st.caption("Previously user-confirmed context — your values are retained while you edit them.")
     st.write(
         "These fields are your account of the situation. No facts have been independently "
-        "verified. Free text is retained for reference; only the structured selections "
-        "control which follow-up questions appear."
+        "verified. Only the fields you confirm and your structured answers guide the assessment. "
+        "Your corrections and restored progress are retained rather than replaced on reruns."
     )
+    if not assessment.confirmed:
+        with st.expander("How were the suggestions obtained?"):
+            st.write(
+                "A limited set of English patterns recognises explicit roles, parties, activities "
+                "and relationships. It does not understand unrestricted narratives or infer ethical "
+                "findings. Saved draft fields may also contain your own edits."
+            )
+            matched = extract_context(assessment.scenario)
+            for field, label in (
+                ("role", "Professional role"), ("parties", "Relevant parties"),
+                ("decision", "Professional decision"), ("relationship", "Relationship"),
+            ):
+                st.write(f"**{label} — matches in the saved scenario**")
+                sources = matched.evidence.get(field, ())
+                st.text("; ".join(sources) if sources else "Unknown — no sufficiently clear supported match.")
+            for limitation in matched.limitations:
+                st.caption(limitation)
+            st.caption("Commercial interests and pressure still require your explicit selections outside the supplied example.")
     context = assessment.context
     with st.form("context_confirmation"):
         scenario = st.text_area(
             "Scenario account", value=assessment.scenario, key=_key("context_scenario")
         )
-        role = st.text_input("Your professional role", value=context.role, key=_key("role"))
+        role = st.text_input("Your professional role", value=context.role or "Unknown", key=_key("role"))
         parties = st.text_area(
-            "Relevant parties and their roles", value=context.parties, key=_key("parties")
+            "Relevant parties and their roles", value=context.parties or "Unknown", key=_key("parties")
         )
         decision = st.text_area(
-            "Professional decision or activity", value=context.decision, key=_key("decision")
+            "Professional decision or activity", value=context.decision or "Unknown", key=_key("decision")
         )
         st.caption("For the fields above, enter 'Unknown' if you cannot establish the detail yet.")
         relationship = st.selectbox(
