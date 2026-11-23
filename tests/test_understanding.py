@@ -212,6 +212,19 @@ class UnderstandingTests(unittest.TestCase):
         self.assertEqual(action.checks,{'independence':'Yes','timing':'Before reliance'})
         self.assertEqual(action.evidence_detail,'')
 
+    def test_negated_completion_never_establishes_implementation(self):
+        for source in ('The independent review was never completed.',
+                       'No independent review has been completed.',
+                       'The independent review has never been completed.'):
+            with self.subTest(source=source):
+                self.assertEqual(self.understand(source).actions[0].stage, 'Unknown')
+
+    def test_uncertainty_about_completion_remains_unknown(self):
+        for source in ('I do not know whether the independent review was completed.',
+                       'It is unclear whether the independent review was carried out.'):
+            with self.subTest(source=source):
+                self.assertEqual(self.understand(source).actions[0].stage, 'Unknown')
+
     def test_actual_records_and_outcome_checks_remain_source_assertions(self):
         result=self.understand('An independent partner completed a review; review notes are retained and no continuing influence was identified.')
         action=result.actions[0]

@@ -290,6 +290,6 @@ def build_case_report(case: CaseState) -> str:
     if case.legacy_records:
         lines += ["Earlier source records and answer history remain available in saved progress. Unmapped historical records are not treated as current evidence or conclusions.", ""]
     lines += [
-        "**Scope:** This rule-based assistant addresses Objectivity only and supports professional judgment. It provides no generative AI, independent fact verification, professional validation or certified ethical opinion. User confirmation and reported external checking are not verification performed by this application. Separate audit-independence or other professional requirements may require their own assessment.", "",
+        "**Scope:** This assessment addresses Objectivity only and supports professional judgment. Ethical findings, safeguard effectiveness and conclusions are determined by the rule-based engine. Optional AI assistance can suggest source information for review or organise approved report wording; it cannot verify facts or issue ethical clearance. This application provides no independent fact verification, professional validation or certified ethical opinion. User confirmation and reported external checking are not verification performed by this application. Separate audit-independence or other professional requirements may require their own assessment.", "",
     ]
     return "\n".join(lines).rstrip() + "\n"

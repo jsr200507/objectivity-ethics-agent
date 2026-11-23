@@ -109,6 +109,12 @@ def _directed_pressure(unit):
 def _stage(unit):
     if re.search(r"\b(?:not\s+(?:yet\s+)?(?:completed|implemented|carried\s+out)|still\s+(?:planned|pending)|proposed|plan(?:ned)?\s+to|intend\s+to|requested|asked\s+for|will\s+(?:arrange|request|review)|in\s+progress)\b", unit, re.I):
         return 'Planned'
+    # Absence or uncertainty about completion must not become an implemented
+    # safeguard just because the sentence contains a completion verb.
+    if re.search(r"\b(?:never|not)\s+(?:(?:been|actually)\s+)?(?:completed|implemented|carried\s+out)\b|\bno\s+(?:independent\s+)?(?:review|action|measure|safeguard)\s+(?:(?:has|had|have|was|were|been|ever)\s+){0,4}(?:completed|implemented|carried\s+out)\b", unit, re.I):
+        return 'Unknown'
+    if re.search(r"\b(?:unknown|unclear|unsure|uncertain|do\s+not\s+know|don['’]t\s+know)\b[^.!?;]{0,130}\b(?:completed|implemented|carried\s+out|reviewed|finished)\b", unit, re.I):
+        return 'Unknown'
     if re.search(r"\b(?:completed|implemented|carried\s+out|has\s+reviewed|have\s+reviewed|was\s+reviewed|review\s+was\s+finished|removed\s+from|withdrew|withdrawn|ended\s+the|declined\s+the)\b", unit, re.I):
         return 'Implemented'
     return 'Unknown'

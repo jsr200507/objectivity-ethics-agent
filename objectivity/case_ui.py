@@ -273,6 +273,7 @@ def _address(case,snapshot,navigate):
 
 
 def render_case(assessment,navigate):
+    from .ai_ui import understanding_status, report_assistance
     from .navigation_ui import focus_stage
     case=assessment.case_state
     if case is None:
@@ -285,12 +286,15 @@ def render_case(assessment,navigate):
         return
     labels = {'identify':'Step 1 of 3 · Understand Your Scenario', 'case_evaluate':'Step 2 of 3 · Identify & Evaluate Threats', 'case_address':'Step 3 of 3 · Address Threats', 'case_report':'Final Ethical Assessment Report'}
     st.caption(labels.get(stage,'Your assessment') + ' · Reported evidence, not independently verified')
+    understanding_status(case)
     if stage=='case_report':
         from .case_report import build_case_report
         st.header('Final Ethical Assessment Report')
+        overview = report_assistance(case)
         report = build_case_report(case)
         st.markdown(report)
-        st.download_button('Download Objectivity report (Markdown)',report,file_name='objectivity-ethical-assessment.md',mime='text/markdown')
+        download = overview + '\n\n---\n\n' + report if overview else report
+        st.download_button('Download Objectivity report (Markdown)',download,file_name='objectivity-ethical-assessment.md',mime='text/markdown')
         if st.button('Revisit actions and residual threats'): navigate('case_address')
         _facts(case,navigate)
         focus_stage()
@@ -327,5 +331,5 @@ def render_case(assessment,navigate):
         _address(case,snapshot,navigate)
         _facts(case,navigate)
     for limitation in snapshot.limitations: st.caption(limitation)
-    st.caption('Objectivity only · No generative AI · No independent fact verification · This supports professional judgment, not a certified ethical opinion. Separate audit-independence requirements may need consideration.')
+    st.caption('Objectivity only · Ethical evaluation remains rule-based · No independent fact verification · This supports professional judgment, not a certified ethical opinion. Separate audit-independence requirements may need consideration.')
     focus_stage()

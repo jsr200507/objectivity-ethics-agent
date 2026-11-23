@@ -8,10 +8,11 @@ The scenario-driven workflow begins with a concise, prefilled summary for review
 then combines threat identification and evaluation in a guided stage. It adds
 evidence-linked assessment of existing actions, residual-threat reasoning and a
 downloadable Ethical Assessment Report. It uses free, open-source packages and
-runs without API keys, subscriptions or external services. Scenario understanding,
-ethical evaluation, safeguard assessment and reports are rule-based. Task 1 does
-not integrate GenAI or call an external API. No facts or conclusions are
-independently verified by the application.
+runs without API keys, subscriptions or external services. Optional, consented
+AI assistance can suggest scenario facts and organise approved report wording.
+Ethical evaluation, safeguard effectiveness and conclusions remain deterministic.
+AI is disabled by default; no facts or conclusions are independently verified by
+the application.
 
 ## Run locally
 
@@ -33,12 +34,40 @@ use that workspace's supported port-forwarding mechanism when available.
 `app.py` remains the Streamlit entry point. The development-container launch
 command also targets `app.py`.
 
+## Optional AI assistance
+
+The complete local workflow remains available without AI configuration. The
+optional Groq-compatible adapter requires a server-side key, an explicitly
+selected model, operator confirmation of an eligible free-tier configuration,
+and user consent before case information can leave the application. A key alone
+does not enable requests; a lecturer never needs to supply a key.
+
+Current free-tier, model, regional and data-handling information could not be
+verified: bounded requests to Groq's official documentation returned the network
+proxy error `Tunnel connection failed: 403 Forbidden`. No live credential or
+inference call was tested. There is no default model or guaranteed free quota.
+Keep AI unconfigured until the operator has checked the current official terms,
+account plan and model availability. See [configuration, consent, limits and
+verification details](docs/optional-ai.md).
+
+Initial assistance produces structured, evidence-linked candidate records for
+Step 1 review. Optional report assistance selects and orders approved,
+case-specific wording variants; it does not perform unrestricted report rewriting
+or replace the full nine-section deterministic report. Invalid output, timeouts,
+rate limits and exhausted allowances retain local functionality and progress.
+The normal opted-in target is one understanding request and one optional overview
+request, with a configurable hard maximum of three attempts per assessment.
+
 ## Current user workflow
 
 **Scenario Input → Step 1: Understand Your Scenario → Step 2: Identify & Evaluate
 Threats → Step 3: Address Threats → Final Ethical Assessment Report**
 
 1. Enter a scenario and select **Review scenario**, or choose **Try CFO example**.
+   If optional AI is configured, initial assistance requires the separate
+   **I consent to optional external AI-assisted understanding of this scenario.**
+   checkbox before submitting **Review scenario**. The authored CFO example loads
+   locally without an external request.
    Step 1 automatically prefills six concise summary sections: professional role
    and decision; people and relationships; financial, commercial and career
    interests; reported pressure or influence; material uncertainties; and actions
@@ -75,6 +104,10 @@ Threats → Step 3: Address Threats → Final Ethical Assessment Report**
    the app explains why and does not force additional safeguards or an artificial
    implementation questionnaire.
 7. Select **Generate Objectivity report** and download Markdown if required.
+   If configured, **Optional AI-assisted report overview** requires its own
+   external-processing consent and explicit request. It cannot change ethical
+   findings or reported action stages; the full deterministic report remains
+   available whether or not assistance succeeds.
    Revisit source facts or actions to recalculate the report. A downloaded report
    is a revision-specific snapshot and must be regenerated after material changes.
 8. Use **Download progress** for a portable JSON backup. On reopening the same app
@@ -90,7 +123,8 @@ are not part of autosave or exported progress.
 
 ## Evidence and Objectivity reasoning
 
-The local understanding provider proposes actors, professional activities,
+The local understanding provider, optionally supplemented by validated AI
+proposals, identifies actors, professional activities,
 relationships, actual beneficiaries, reported influence and existing actions.
 Supported narrative proposals retain literal source excerpts. The provider does
 not issue ethical verdicts. Users must review the concise account before the
@@ -117,7 +151,8 @@ three categories appear. Combined-threat reasoning considers interactions withou
 treating repeated descriptions of one event as independent corroboration.
 
 Reported narrative, user-supplied corrections, disputed accounts and explicit
-unknowns remain distinguishable. User review means the records reflect the user's
+unknowns remain distinguishable. AI suggestions remain candidate accounts until
+reviewed. User review means the records reflect the user's
 account; it is **not independent verification**. Possible future recovery or an
 assurance by management remains an attributed claim. Extra explanatory text is
 retained as reported context and is not automatically interpreted into new facts.
@@ -246,7 +281,10 @@ Each browser save stores the current scenario, actor and source-fact ledger,
 submitted clarification answers, actions and evidence responses, source revisions
 and superseded history, review status and workflow stage. Legacy context, answers
 and supporting-action slots are retained when present. It excludes widget state,
-evaluations and reports. Restoration
+evaluations and reports. Non-evidential AI request counts and understanding-mode
+notes are retained in source history to preserve the assessment's allowance across
+refresh/import. API keys, consent controls and raw completed response caches are
+not exported; response reuse is held in server-session memory only. Restoration
 validates the records and recomputes dependency signatures, questions, findings
 and reports. Stale conditional answers are retained in history with a notice;
 an incompatible stage moves back to review. A case whose source account is not
@@ -291,6 +329,10 @@ the component is blocked. A missing acknowledgement never means a save succeeded
   A stale tab cannot silently overwrite a newer copy. The app pauses autosave on
   conflict and asks which version to keep. A replacement/deletion waiting behind
   a conflicting autosave is cancelled and needs a fresh confirmation.
+- With explicit consent, scenario information and later validated assessment
+  clauses may be sent to the configured external provider. Use fictional or
+  appropriately anonymised cases and review the provider's current data terms;
+  browser-local storage does not describe that external processing.
 - Browser-local data and exported JSON may contain sensitive scenario details.
   Use fictional or anonymised cases. Storage is not encrypted or access-controlled
   by an application account; someone using the same browser profile may read it.
@@ -317,6 +359,16 @@ or that every browser or embedding supports the storage component.
   revisions, material questions and derived reasoning contracts.
 - `objectivity/understanding.py`: local English understanding provider and source
   proposal validation; the application does not require another provider.
+- `objectivity/ai_provider.py`: replaceable JSON-provider protocol, optional
+  server-side Groq-compatible transport, bounded input/output and safe failures.
+- `objectivity/ai_usage.py`: per-assessment request caps, success/failure reuse,
+  rerun protection and best-effort process-level concurrency/rate controls.
+- `objectivity/ai_understanding.py`: strict schema, literal-source and attribution
+  checks for candidate facts; it cannot create ethical verdicts.
+- `objectivity/ai_report.py`: bounded selection of approved report clauses and
+  wording variants, with stale-source and contradiction checks.
+- `objectivity/ai_ui.py`: explicit consent, visible mode, fallback and request
+  history coordination; it does not export credentials or raw response caches.
 - `objectivity/case_reasoning.py`: source-linked threat instances, material-gap
   selection, significance, combined influences and third party reasoning.
 - `objectivity/case_workflow.py`: source correction, answer invalidation, action
@@ -351,21 +403,27 @@ or that every browser or embedding supports the storage component.
 - `tests/test_case_*.py`, `tests/test_understanding.py`: new reasoning, source
   attribution, material questioning, action evidence, report, UI, restoration and
   migration, confirmation/editing and no-unnecessary-question regressions.
+- `tests/test_ai_*.py`: mocked transport, consent, grounding, request limits,
+  rerun reuse, failures, report consistency and complete Streamlit journeys.
 - Other `tests/test_*.py`: retained Phase 1–3, extraction, progressive context,
   save/resume, JavaScript bridge and UI regressions.
 - `tests/test_property_comparison.py`: representative valuation, career and
   financing interests, attributed assumptions, scoped family participation and
   unfamiliar-context regressions.
 
-## Ready for the next provider task
+## Hybrid provider boundary
 
-The existing `UnderstandingProvider` protocol and `UnderstandingResult` source
-contract remain available for Task 2. A future provider can propose attributed
-actors, facts and actions through the same validation boundary. The evidence-linked
-case model, material-gap questions, action-effectiveness rules, report generation
-and source-only persistence can be reused without replacing the ethical engine.
-No GenAI transport, external provider, credential configuration or AI request
-controller is implemented in this Task 1 branch.
+`UnderstandingProvider` and `UnderstandingResult` remain the source-contract
+boundary. The optional JSON-provider transport can be replaced without rewriting
+the evidence model or ethical engine. AI output is schema-validated and grounded
+in source excerpts before the existing user-confirmation step; it cannot establish
+verification, acceptable-level judgments, implementation, effectiveness or ethical
+clearance. The deterministic report and all local assessment stages remain usable.
+
+Complex free-text interpretation is not implemented in this version. Ordinary
+Yes, No and Unknown answers, navigation, reruns and downloads do not trigger
+model calls. See [optional AI details](docs/optional-ai.md) for request ceilings,
+cache boundaries, deployment configuration and remaining limitations.
 
 ## Separate Streamlit test application
 
@@ -374,14 +432,17 @@ Create a **new** Streamlit Community Cloud app with these settings:
 | Setting | Value |
 | --- | --- |
 | Repository | `jsr200507/objectivity-ethics-agent` |
-| Branch | `dev/workflow-ux-v4` |
+| Branch | `dev/hybrid-genai-v5` |
 | Main file path | `app.py` |
 | Advanced settings — Python | `3.12` |
-| Secrets | Leave empty |
+| Secrets | Leave empty for deterministic mode; optional operator settings are documented below |
 | App URL | Choose a new, unused test-app subdomain |
 
 The root `requirements.txt` is installed automatically. No API key, additional
-service or paid subscription is required. Leave existing production and preview
+service or paid subscription is required for the complete deterministic workflow.
+For optional assistance, use only server-side Secrets after verifying the eligible
+free provider/account/model and user-consent requirements in
+[the configuration guide](docs/optional-ai.md). Leave existing production and preview
 apps unchanged. These settings describe creating a separate test app; they do not
 mean one has been deployed.
 
@@ -403,6 +464,17 @@ if Node is absent. Node is not an application/runtime dependency. Real browser
 refresh/reopen, storage acknowledgements and file uploads require browser checks;
 AppTest alone cannot establish browser persistence.
 
+Focused mocked-AI checks:
+
+```bash
+python -m unittest tests.test_ai_provider tests.test_ai_usage tests.test_ai_understanding tests.test_ai_report tests.test_ai_ui -v
+```
+
+No automated test requires live credentials or consumes provider quota. Mocked
+checks establish controlled behavior, not live provider availability. Real browser
+checks separately exercise assisted mode with controlled responses and the
+complete no-key fallback journey.
+
 Representative cases include the CFO friendship/revenue/contract-renewal case;
 inventory recognition with separate personal bonus and company interests;
 procurement with distinct family and director interests; family employment with
@@ -416,6 +488,14 @@ different qualified findings rather than one generic report.
 
 ## Functional and professional limitations
 
+- Live provider connectivity, current free-tier eligibility, model availability
+  and data terms remain unverified in this workspace. Configure no external
+  assistance until the operator can verify them. The full app remains functional
+  with AI disabled.
+- AI grounding checks cannot prove unrestricted language interpretations correct.
+  Novel ambiguous proposals may be rejected conservatively; the source account
+  must still be reviewed. The optional report overview uses approved wording
+  rather than arbitrary generated prose and cannot revise the ethical conclusion.
 - Local English grammars do not understand unrestricted narratives. Unfamiliar
   wording, actors, pronouns, attribution, negation and multiple decisions may be
   missed or misclassified. Inspect source excerpts and use typed corrections;
@@ -440,6 +520,7 @@ different qualified findings rather than one generic report.
 
 The existing Streamlit deployment can retain `app.py` and the unchanged
 `requirements.txt` (`streamlit>=1.40,<2.0`). New assessment modules use only the
-standard library and existing Streamlit functionality. Local checks validate the
+standard library and existing Streamlit functionality; the optional transport
+adds no SDK or paid dependency. Local checks validate the
 installed runtime; they do not mean changes have been committed, pushed or
 deployed, or establish the state of any live production or preview app.

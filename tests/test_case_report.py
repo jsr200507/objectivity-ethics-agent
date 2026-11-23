@@ -107,7 +107,8 @@ class CaseReportTests(unittest.TestCase):
         self.assertIn("Effectiveness Established", report)
         self.assertIn("conditional", report)
         self.assertIn("not verification performed by this application", report)
-        self.assertIn("no generative AI, independent fact verification, professional validation or certified ethical opinion", report)
+        self.assertIn("no independent fact verification, professional validation or certified ethical opinion", report)
+        self.assertIn("Optional AI assistance", report)
 
     def test_future_recovery_is_an_attributed_claim(self):
         case, snapshot = case_fixture()

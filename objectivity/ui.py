@@ -5,6 +5,7 @@ import streamlit as st
 from objectivity.examples import EXAMPLE_SCENARIO
 from objectivity.case_workflow import start_case, migrate_legacy_assessment
 from objectivity.case_ui import render_case
+from objectivity.ai_ui import understanding_choice, start_assisted_case
 from objectivity.extraction import extract_context
 from objectivity.intake_ui import render_intake
 from objectivity.intake import sync_intake
@@ -75,6 +76,7 @@ def _scenario_view(assessment: Assessment) -> None:
             placeholder="Describe the professional work, relevant circumstances and what has happened…",
             key=_key("scenario"),
         )
+        consent = understanding_choice()
         identify = st.form_submit_button("Review scenario")
         with st.expander("Previous guided assessment (optional)"):
             st.caption("Use the earlier context-confirmation workflow, including for saved assessments.")
@@ -84,7 +86,7 @@ def _scenario_view(assessment: Assessment) -> None:
             st.warning("Please enter a scenario before continuing.")
         elif identify:
             try:
-                case = start_case(scenario)
+                case = start_assisted_case(scenario, consent=consent)
             except ValueError as error:
                 st.warning(str(error))
             else:
@@ -471,7 +473,7 @@ def render_app() -> None:
         "principle of Objectivity and supports, rather than replaces, professional judgment."
     )
     st.caption(
-        "Rule-based guidance · No generative AI · No independent fact verification"
+        "Rule-based ethical evaluation · Optional AI assistance with consent · No independent fact verification"
     )
     with st.sidebar:
         st.subheader("Your session")
