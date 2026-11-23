@@ -27,8 +27,9 @@ from .review import (
 
 
 FORMAT_NAME = "objectivity-ethics-assistant-progress"
-FORMAT_VERSION = 2
+FORMAT_VERSION = 3
 LEGACY_FORMAT_VERSION = 1
+INTAKE_FORMAT_VERSION = 2
 RULES_VERSION = "objectivity-phases-1-3-v1"
 MAX_PROGRESS_BYTES = 2 * 1024 * 1024
 MAX_TEXT_LENGTH = 100_000
@@ -36,7 +37,8 @@ MAX_RECORDS = 2_000
 MAX_ACTION_SLOTS = 100
 MAX_SLOT_NUMBER = 100_000
 MAX_DEPTH = 20
-VIEWS = frozenset({"scenario", "context", "questions", "review", "address", "report"})
+CASE_VIEWS = frozenset({"identify", "case_evaluate", "case_address", "case_report"})
+VIEWS = frozenset({"scenario", "context", "questions", "review", "address", "report"}) | CASE_VIEWS
 _ADDRESS_FIELDS = frozenset({
     "action", "implementation", "independence", "competence", "authority", "scope",
     "replacement", "obligations", "recipient", "response", "documentation", "timing",
@@ -255,7 +257,7 @@ def _import_progress(data: str | bytes) -> ProgressSnapshot:
     root = _decode(data)
     if (
         root["format"] != FORMAT_NAME or type(root["schema_version"]) is not int
-        or root["schema_version"] not in {LEGACY_FORMAT_VERSION, FORMAT_VERSION}
+        or root["schema_version"] not in {LEGACY_FORMAT_VERSION, INTAKE_FORMAT_VERSION, FORMAT_VERSION}
     ):
         raise ProgressError("This progress file uses an unsupported format or schema version.")
     if root["rules_version"] != RULES_VERSION:
@@ -264,8 +266,10 @@ def _import_progress(data: str | bytes) -> ProgressSnapshot:
     if view not in VIEWS:
         raise ProgressError("The saved workflow stage is not supported.")
     assessment_fields = {"scenario", "context", "confirmed", "answers", "archive", "revision"}
-    if root["schema_version"] == FORMAT_VERSION:
+    if root["schema_version"] >= INTAKE_FORMAT_VERSION:
         assessment_fields.add("context_clarifications")
+    if root["schema_version"] == FORMAT_VERSION:
+        assessment_fields.add("case_state")
     raw_assessment = _object(root["assessment"], assessment_fields, "The assessment")
     revision = _integer(raw_assessment["revision"], "The assessment revision")
     scenario = _text(raw_assessment["scenario"], "The scenario")
@@ -290,6 +294,17 @@ def _import_progress(data: str | bytes) -> ProgressSnapshot:
     assessment.context_clarifications = _context_clarifications(
         raw_assessment.get("context_clarifications", {}), assessment, warnings,
     )
+    from .case_codec import CaseCodecError, case_from_dict
+
+    raw_case = raw_assessment.get("case_state")
+    try:
+        assessment.case_state = case_from_dict(raw_case)
+    except CaseCodecError as error:
+        raise ProgressError(str(error)) from error
+    if raw_case is not None and assessment.case_state is not None:
+        previous_history = len(raw_case["state"]["history"])
+        if len(assessment.case_state.history) > previous_history:
+            warnings.append("Some scenario-driven clarification answers described superseded facts and were retained in history.")
     _restore_answers(
         assessment, phase_one, lambda: eligible_questions(assessment),
         lambda id, answer: save_answer(assessment, id, answer.choice, answer.explanation),
@@ -363,13 +378,17 @@ def _import_progress(data: str | bytes) -> ProgressSnapshot:
     has_account = bool(
         scenario.strip() or assessment.confirmed or context != Context()
         or assessment.answers or assessment.archive or review.answers or review.archive
-        or address.answers or address.archive or address.extra_slots
+        or address.answers or address.archive or address.extra_slots or assessment.case_state is not None
     )
-    if view == "scenario" and has_account:
-        # The entry screen's sample loader intentionally starts a new account.
-        # Restoring an existing case there would bypass replacement confirmation.
-        view = "context"
-        warnings.append("The saved entry stage was moved to context review to preserve the existing assessment.")
+    if view in CASE_VIEWS:
+        if assessment.case_state is None:
+            view = "context" if has_account else "scenario"
+            warnings.append("The scenario-driven stage was moved back because no supported case source records were saved.")
+        # Case evaluation/report views can be provisional with material gaps.
+        # Do not restore the former all-questions-before-findings gate here.
+    elif view == "scenario" and has_account:
+        view = "identify" if assessment.case_state is not None else "context"
+        warnings.append("The saved entry stage was moved to review to preserve the existing assessment.")
     elif not assessment.confirmed and view not in {"scenario", "context"}:
         view = "context" if has_account else "scenario"
         warnings.append("The saved stage was moved back to context confirmation.")
@@ -400,9 +419,17 @@ def _export_progress(assessment: Assessment, review: ReviewState, address: Addre
     sync_intake(assessment)
     sync_review(assessment, review)
     sync_address(assessment, review, address)
+    from .case_codec import CaseCodecError, case_to_dict
+
+    try:
+        case_document = case_to_dict(assessment.case_state)
+    except CaseCodecError as error:
+        raise ProgressError(str(error)) from error
+    source_assessment = asdict(assessment)
+    source_assessment["case_state"] = case_document
     root = {
         "format": FORMAT_NAME, "schema_version": FORMAT_VERSION, "rules_version": RULES_VERSION,
-        "assessment": asdict(assessment),
+        "assessment": source_assessment,
         "review": {"answers": {id: asdict(answer) for id, answer in review.answers.items()}, "archive": [asdict(record) for record in review.archive]},
         "address": {
             "answers": {id: asdict(answer) for id, answer in address.answers.items()},

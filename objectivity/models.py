@@ -2,6 +2,8 @@
 
 from dataclasses import dataclass, field
 
+from .case_model import CaseState
+
 
 RELATIONSHIP_OPTIONS = (
     "Close personal relationship",
@@ -85,3 +87,4 @@ class Assessment:
     archive: list[ArchivedAnswer] = field(default_factory=list)
     revision: int = 0
     context_clarifications: dict[str, ContextClarification] = field(default_factory=dict)
+    case_state: CaseState | None = None

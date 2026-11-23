@@ -3,6 +3,8 @@
 import streamlit as st
 
 from objectivity.examples import EXAMPLE_SCENARIO
+from objectivity.case_workflow import start_case, migrate_legacy_assessment
+from objectivity.case_ui import render_case
 from objectivity.extraction import extract_context
 from objectivity.intake_ui import render_intake
 from objectivity.intake import sync_intake
@@ -52,29 +54,43 @@ def _key(name: str) -> str:
 
 
 def _scenario_view(assessment: Assessment) -> None:
-    st.caption("Step 1 of 6 · Describe your scenario")
+    st.caption("Identify · Describe the professional decision")
     st.subheader("What situation would you like to explore?")
     st.write(
-        "Describe the professional decision and the circumstances that concern you. "
-        "You will confirm the relevant details yourself in the next step."
+        "Describe the decision, the people involved and any actions already taken. "
+        "You will see provisional findings first, then clarify only material gaps."
     )
-    if st.button("Load CFO / revenue recognition example"):
-        suggested = extract_context(EXAMPLE_SCENARIO).context
-        st.session_state.assessment = Assessment(
-            scenario=EXAMPLE_SCENARIO, context=suggested
-        )
-        st.session_state.example_loaded = True
-        _navigate("context")
+    if st.button("Try CFO example"):
+        st.session_state.assessment = Assessment(scenario=EXAMPLE_SCENARIO, case_state=start_case(EXAMPLE_SCENARIO))
+        _navigate("identify")
+    with st.expander("Previous guided example (optional)"):
+        if st.button("Load CFO / revenue recognition example"):
+            suggested = extract_context(EXAMPLE_SCENARIO).context
+            st.session_state.assessment = Assessment(scenario=EXAMPLE_SCENARIO, context=suggested)
+            st.session_state.example_loaded = True
+            _navigate("context")
     with st.form("scenario_entry"):
         scenario = st.text_area(
             "Your scenario", value=assessment.scenario, height=180,
-            placeholder="Describe your role, the decision and what happened…",
+            placeholder="Describe the professional work, relevant circumstances and what has happened…",
             key=_key("scenario"),
         )
-        submitted = st.form_submit_button("Continue to context confirmation")
-    if submitted:
+        identify = st.form_submit_button("Identify potential threats")
+        with st.expander("Previous guided assessment (optional)"):
+            st.caption("Use the earlier context-confirmation workflow, including for saved assessments.")
+            submitted = st.form_submit_button("Continue to context confirmation")
+    if identify or submitted:
         if not scenario.strip():
             st.warning("Please enter a scenario before continuing.")
+        elif identify:
+            try:
+                case = start_case(scenario)
+            except ValueError as error:
+                st.warning(str(error))
+            else:
+                assessment.scenario = scenario.strip()
+                assessment.case_state = case
+                _navigate("identify")
         else:
             assessment.scenario = scenario.strip()
             assessment.context = extract_context(assessment.scenario).context
@@ -459,7 +475,7 @@ def render_app() -> None:
     )
     with st.sidebar:
         st.subheader("Your session")
-        st.write("Describe → Confirm → Clarify → Evaluate → Address → Report")
+        st.write("Identify → Evaluate → Address → Report")
         waiting_for_resume = render_save_resume()
     if waiting_for_resume:
         if "_progress_intent" in st.session_state:
@@ -467,6 +483,15 @@ def render_app() -> None:
         else:
             st.info("Choose Resume previous assessment or Start new assessment in Save & Resume. The saved copy has not been overwritten.")
         return
+    if st.session_state.view in {"identify", "case_evaluate", "case_address", "case_report"}:
+        render_case(assessment, _navigate)
+        return
+    if st.session_state.view != "scenario" and assessment.scenario.strip():
+        with st.expander("Reassess this saved case with the scenario-driven workflow"):
+            st.caption("Your previous answers and history stay available. Ambiguous coverage is reviewed rather than assumed.")
+            if st.button("Reassess saved case"):
+                assessment.case_state = migrate_legacy_assessment(assessment, st.session_state.review_state, st.session_state.address_state)
+                _navigate("identify")
     if st.session_state.view == "scenario":
         _scenario_view(assessment)
     elif st.session_state.view == "context":

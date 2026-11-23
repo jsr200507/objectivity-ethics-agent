@@ -51,10 +51,13 @@ function mount(flags = {}) {
     posts, status, targets,
     async send(command, foreign = false, eventOrigin = 'https://assistant.example') {
       receive({source: foreign ? {} : parent, origin: eventOrigin, data: {type: 'streamlit:render', args: {command}}});
-      for (let i = 0; i < 100; i++) {
+      // WebCrypto runs off-thread. A fixed number of event-loop turns can
+      // finish before its acknowledgement arrives on a busy test machine.
+      const deadline = Date.now() + 2000;
+      while (Date.now() < deadline) {
         const found = posts.find(post => post.type === 'streamlit:setComponentValue' && post.value.id === command.id);
         if (found) return found.value;
-        await new Promise(resolve => setImmediate(resolve));
+        await new Promise(resolve => setTimeout(resolve, 1));
       }
       return null;
     },

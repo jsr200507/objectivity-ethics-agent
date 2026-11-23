@@ -1,19 +1,14 @@
 # Objectivity Ethics Assistant
 
 A Python and Streamlit assistant focused exclusively on the fundamental principle
-of **Objectivity**. It supports, rather than replaces, professional judgment.
+of **Objectivity**. It follows **Identify → Evaluate → Address** and supports,
+rather than replaces, professional judgment.
 
-Phase 1 provides scenario entry, explicit context confirmation, and adaptive
-clarification. Phase 2 adds evidence-linked identification and provisional
-evaluation of familiarity, intimidation and self-interest threats. Phase 3 adds
-adaptive action planning, conditional assessment of safeguard effectiveness,
-residual-threat reasoning and a downloadable Ethical Assessment Report.
-It uses free, open-source packages, with no paid APIs, subscriptions, services or
-API keys. There is no generative AI or independent fact verification.
-
-Save & Resume adds acknowledged browser-local autosave for submitted progress,
-plus validated JSON backups that work without browser storage. The assessment
-rules and the three-phase workflow are unchanged.
+The scenario-driven workflow provides immediate provisional findings, focused
+clarification, evidence-linked evaluation of existing actions, residual-threat
+reasoning and a downloadable Ethical Assessment Report. It uses free,
+open-source packages, with no paid APIs, subscriptions, API keys or external AI
+services. It does not provide generative AI or independent fact verification.
 
 ## Run locally
 
@@ -27,287 +22,156 @@ python -m streamlit run app.py
 ```
 
 On Windows, activate the virtual environment with `.venv\Scripts\activate`.
-Open the local URL printed by Streamlit. Stop the app with Ctrl+C.
+Open the local URL printed by Streamlit. Stop the app with Ctrl+C. For a headless
+environment, use `python -m streamlit run app.py --server.headless true`.
+A cloud workspace's localhost is not necessarily accessible from another machine;
+use that workspace's supported port-forwarding mechanism when available.
 
-For a headless environment:
+`app.py` remains the Streamlit entry point. The development-container launch
+command also targets `app.py`.
 
-```bash
-python -m streamlit run app.py --server.headless true
-```
+## Current user workflow
 
-## Use the assistant
+1. Enter a scenario and select **Identify potential threats**, or choose
+   **Try CFO example**. Provisional Objectivity findings appear immediately;
+   confirmation of a long context form is not a prerequisite.
+2. Inspect each finding's reported source and mechanism. Open **Review or correct
+   reported information** to correct the meaning, evidence status or parties, or
+   add a missing party or explicitly typed fact. Confirm that the source records
+   reflect your account, including uncertainties.
+3. Answer the single active material question using **Record answer and reassess**.
+   **Why this matters** explains how it could affect the assessment. Questions
+   reuse recorded facts and target unresolved decision links rather than following
+   one fixed category questionnaire. An explicit **Unknown** is retained as a
+   limitation and is not repeatedly asked.
+4. Select **Evaluate threats** to review the evidence-linked significance and
+   hypothetical reasonable and informed third party assessment. You can proceed
+   with recorded gaps; the result remains qualified rather than inventing answers
+   or forcing irrelevant questions.
+5. Select **Review existing actions**. Review actions recognised in the account,
+   record additional actions and identify the specific sources they address.
+   Distinguish **Unknown**, **Not Taken**, **Planned** and **Implemented**.
+6. Answer only the action-evidence questions currently material to effectiveness.
+   Correct earlier evidence through the action editor when new information emerges.
+   Review the resulting residual findings and prioritised next steps before
+   proceeding, arranging a different response or considering declining/ending the
+   activity subject to relevant obligations.
+7. Select **Generate Objectivity report** and download Markdown if required.
+   Revisit source facts or actions to recalculate the report. A downloaded report
+   is a revision-specific snapshot and must be regenerated after material changes.
+8. Use **Download progress** for a portable JSON backup. On reopening the same app
+   in the same browser profile, choose **Resume previous assessment**. Use
+   **Import progress** to restore a backup elsewhere.
 
-1. Enter a scenario, or choose **Load CFO / revenue recognition example**.
-2. Review the suggested context. Answer one focused question at a time for
-   missing or ambiguous details, correct suggestions with the **Edit** controls,
-   then select **Confirm reviewed context**. The complete editor is optional.
-3. Answer the single active follow-up and select **Save and continue**. Use
-   **Why this question?** to inspect its trigger and purpose.
-4. Use **Review previous answers** to edit an answer, or **Edit scenario or
-   context** when the situation changes. Relevant follow-ups are recalculated.
-5. Select **Review potential threats** when clarification is complete. Review
-   supporting evidence, significance reasoning, missing information and the
-   provisional reasonable and informed third party assessment. Additional
-   evaluation questions appear one at a time only when relevant.
-6. When the evaluation questions are answered, select **Address Threats**.
-   Record actions against each supported potential threat. Distinguish a proposal
-   from reported implementation, the evidence supporting it, and any reported
-   external check. Additional questions depend on the action selected.
-7. Use **Add a supporting action** if several measures are needed for a threat.
-   Use **Review Address answers** to revise actions or implementation evidence.
-8. Select **Generate Ethical Assessment Report**. Review the current conditional
-   conclusions and download a Markdown copy. Incomplete information produces an
-   interim assessment, not an invented assurance of acceptability.
-9. Use **Download progress** for a portable JSON backup. On reopening the same
-   app in the same browser profile, choose **Resume previous assessment**. Use
-   **Import progress** to restore a JSON backup in another session or browser.
+Only submitted form values are saved. Unsubmitted text and unsaved edits are not
+part of autosave or exported progress.
 
-Step 2 first suggests context using free, local English rules: the
-professional role, relevant people/groups/organisations and roles, professional
-activities, relationships, financial/performance incentives and reported pressure.
-Title and actor patterns combine with professional-action, ownership, incentive
-and request/consequence rules; there are no complete-scenario lookup answers.
-The optional **How were the suggestions obtained?** panel shows literal source
-excerpts for every supported field. Missing, ambiguous or conflicting details
-remain unresolved until clarified or explicitly recorded as not known. Every
-suggestion remains editable and requires user confirmation before assessment.
+## Evidence and Objectivity reasoning
 
-The default interface shows a concise summary instead of a mandatory six-field
-form. Only one context question is active. Questions prioritise the role and
-decision, then weak or missing party lists, relationships, financial beneficiaries
-and reported pressure. Known details are retained; a generic title or ambiguous
-beneficiary can prompt a targeted clarification. Unfamiliar job titles and
-activities can be supplied directly without matching a recognised phrase.
+The local understanding layer proposes actors, professional activities,
+relationships, actual beneficiaries, reported influence and existing actions.
+Supported narrative proposals retain literal source excerpts. The understanding
+provider does not issue ethical verdicts. Authored reasoning rules consume the
+source ledger and generate distinct threat instances tied to the relevant actor,
+decision and source information.
 
-**I don't know yet** records a genuine uncertainty, instead of treating an
-extraction failure as an established lack of information. Explicitly answered
-uncertainties are not repeatedly asked. Equivalent structured answers are reused
-in the subsequent clarification stage; new questions about contact, financial
-links, responsibility or consequences still appear when needed.
+| Potential threat | Evidence-supported mechanism |
+| --- | --- |
+| Self-interest | A reported financial or other interest potentially connected to the decision, with the actual beneficiary retained |
+| Familiarity | A family or explicitly close personal connection relevant to professional judgment; employment alone does not establish participation in the work |
+| Intimidation | Reported pressure or influence that could deter objective judgment; a request is not automatically coercion or a completed change to work |
+| Self-review | An explicit connection between earlier work and subsequent assessment of that work |
+| Advocacy | An explicit promotion or representation of a position that must subsequently be assessed objectively |
 
-Financial clarification distinguishes the user's/household's interest, a family
-member's interest, the organisation's interest, and another person's interest.
-Where necessary, a follow-up records the recipient and financial connection.
-A sister's shareholding or a director's consulting fee is not automatically a
-personal benefit for the user. Free-text explanations are kept as the user's
-account, not interpreted as evidence. A family tie does not establish closeness,
-and promotion does not automatically establish a monetary benefit.
+Only supported categories appear. Multiple incentives or parties can create
+separate instances within the same category; the user's bonus, a sister's
+shareholding, a director's fee and firm income are not interchangeable sources.
+A family connection does not establish closeness, employment does not establish
+participation, and another person's financial benefit does not establish the
+user's ownership. Self-review and advocacy are not added merely because the other
+three categories appear. Combined-threat reasoning considers interactions without
+treating repeated descriptions of one event as independent corroboration.
 
-Each summary detail can be edited independently. **Edit all context details
-(optional)** retains direct control over all fields, scenario edits and fresh
-suggestion previews. Confirming that complete editor explicitly acknowledges any
-Unknown fields left there. Focused edits require confirmation again and refresh
-dependent assessment answers. User-confirmed accounts remain unverified.
+Reported narrative, user-supplied corrections, disputed accounts and explicit
+unknowns remain distinguishable. User review means the records reflect the user's
+account; it is **not independent verification**. Possible future recovery or an
+assurance by management remains an attributed claim. Extra explanatory text is
+retained as reported context and is not automatically interpreted into new facts.
 
-Suggestions are generated when you continue from scenario entry or load the CFO
-example. They are stored as **unconfirmed draft context**, so browser autosave and
-JSON export/import preserve them together with submitted clarification progress. Reruns, restored
-progress and editing previously confirmed context do not overwrite corrections.
-Use **Preview fresh suggestions** in Step 2 to extract from an edited scenario
-or revisit an older saved assessment. The preview changes nothing until you
-select fields and explicitly acknowledge replacement. Applying saves those
-suggestions as an unconfirmed draft, retains your other submitted fields, and
-archives existing answers for reconsideration. Dependent Phase 2/3 answers and
-conclusions are invalidated by the existing dependency checks. Confirm again to
-continue. An unchanged selection leaves the assessment intact.
+Evaluation distinguishes **Acceptability not established**, **Action needed before
+proceeding** and **No direct influence established on the recorded account** where
+appropriate. These are conditional implementation outcomes, not numerical ethics
+scores or declarations of misconduct. Missing information or no identified threat
+is not assurance that threats are absent. A reported change to work differs from
+possible future influence and does not itself prove technical error.
 
-Only the fields you confirm and the subsequent structured selections drive
-threat identification and question selection. Extraction itself does not identify
-a threat, prove a fact or establish misconduct. Confirmation means a user-confirmed
-account, never independent verification. Unknown, Not applicable and Other remain
-valid choices and do not become negative findings.
+The reasonable and informed third party test asks how a hypothetical reasonable
+and informed person would assess the recorded circumstances and protective
+measures. It is applied conditionally to the particular decision and sources;
+no actual independent third party has reviewed the application's findings.
 
-The CFO sample uses the same rules as pasted scenarios for all six fields.
-An explicit professional association is recorded as **Other** with details when
-personal ties are unspecified; a job title does not establish that a relationship
-is exclusively professional. A counterpart's bonus is distinguished from the
-user's financial interest. Career incentives without stated monetary benefit are
-recorded as **Other**, not invented personal financial benefits. An instruction
-to favour a professional outcome can suggest reported pressure, while a routine
-request to assess an issue cannot. No request proves coercion, bias or misconduct.
-Extra free-text answers in subsequent phases are not automatically interpreted.
+## Existing actions, effectiveness and residual threats
 
-Personal pay, commissions, shareholdings and explicit financial incentives are
-classified separately from organisational profit targets, fees and other
-commercial interests. Both can be suggested together using the existing **Both
-commercial and personal interests** selection, which retains both clarification
-paths and report logic. Multiword descriptions such as
-"annual performance bonus" do not change who receives the incentive. A quoted
-counterpart's benefit is not silently assigned to the user.
+Address begins with what has already happened or been proposed. An omitted action
+is not treated as proof that no action was taken. Users can link several actions
+to particular threat instances rather than one category-wide response silently
+covering all sources.
 
-Reported instructions to defer accounting recognition, conceal information or
-withhold it from auditors and other accountability recipients can suggest
-pressure. Routine requests to assess an issue and protective instructions not to
-conceal it are distinguished where the wording supports that distinction. These
-remain reported instructions, not completed changes, explicit threats, verified
-facts or misconduct findings. Possible future recovery mentioned by a manager
-remains that person's claim.
+Implementation and effectiveness are separate. A requested review remains
+**Planned**. Reported completion remains **Implemented** until the action-specific
+record supports coverage, timing, outcome and the relevant protective mechanism.
+For independent review this includes independence, competence and authority;
+removal needs an independent replacement where relevant. Prior work already
+affected may need reassessment even if someone is removed from the decision.
+Selecting that records exist is insufficient without a description of the
+supporting records and what they demonstrate.
 
-The suggested activity retains supported requests about accounting timing,
-amount and disclosure alongside the underlying professional work. Parties
-include explicit plural roles and recipients of information, including people
-from whom information would be withheld. Clear generic/descriptive references
-are deduplicated; distinct or ambiguous organisations are not automatically
-treated as the same entity. Auditor type and personal relationships are not
-invented.
+Disclosure, escalation and documentation can support a response, but are not
+automatically effective safeguards. The resulting protective measure needs its
+own assessment. A known weakness, partial implementation, continuing influence,
+missing scope or explicit Unknown prevents an unsupported positive conclusion.
+Evidence questions stop at a material blocker instead of completing an irrelevant
+checklist; the editor permits revisiting that answer later.
 
-This is deliberately limited rule-based assistance, not unrestricted language
-understanding or generative AI. Unfamiliar roles/phrasing, attribution, pronouns,
-negation and multi-party context can still be missed or misclassified. Multiple
-explicit activities are retained; unresolved alternatives remain Unknown. Source
-excerpts show wording, not verification. Always check the suggestions and their
-scope. No new dependencies, external model, paid API or API key are required.
+Where appropriate implementation, coverage and outcome evidence support it, an
+action can be assessed as effective **conditionally on the recorded evidence**.
+The app does not require an invented universal external-checker rule and does not
+authenticate the user's description of records or an external review. A measure
+addressing one source does not automatically resolve other threats. Material
+source changes invalidate dependent answers or coverage and retain their earlier
+records for reconsideration; stale positive conclusions are not trusted.
 
-Progress shows answered questions among those currently applicable. The total
-can grow or shrink as answers change. "Current clarification complete" means
-only that there are no more questions selected by this version's rules. It does
-not mean that threats are acceptable, that the information is complete, or that
-the ACCA/IESBA framework has been fully applied. Continue to Phase 2 for a
-conditional evaluation, then to the separate Address stage and report.
+The Markdown report has nine sections:
 
-## Phase 2: identification and evaluation
+- Scenario summary and reported context.
+- Identified potential Objectivity threats and supporting sources.
+- Threat evaluation and combined influences.
+- Reasonable and informed third party assessment.
+- Actions taken and proposed.
+- Safeguard effectiveness and remaining evidence gaps.
+- Residual threats.
+- Prioritised next steps.
+- Overall conditional ethical conclusion and limitations.
 
-The authored rules follow the conceptual-framework sequence **Identify,
-Evaluate, Address**. Phase 2 implements the first two stages; Phase 3 considers
-the recorded actions separately. Each initial finding shows
-its supporting structured choices, source field/question IDs, reasoning,
-unresolved information, and an implementation rule ID. These IDs are not
-ACCA/IESBA paragraph references. No professional validation or complete Code
-compliance is claimed.
+Reports are recomputed from current source records and use professional wording,
+without internal question or fact keys. They summarise reasoning rather than
+reproduce the full question transcript. Original sources, edits and superseded
+answers remain in progress data.
 
-| Threat | Identification basis | Factors affecting significance |
-| --- | --- | --- |
-| Familiarity | A confirmed close or continuing personal relationship linked, or potentially linked, to the user's judgment | Current contact and continuing ties; making, recommending, supervising or reviewing the decision; unresolved responsibility |
-| Intimidation | An explicit, implied, or separately supported reported link between pressure and a professional decision | Nature of consequences, responsibility, and reported changes to work; unsupported interpretation is not enough to establish the link |
-| Self-interest | A recorded connection between a commercial/personal financial interest and the decision | Commercial dependence, direct personal outcome, responsibility and unresolved links |
+## Previous saved assessments
 
-The rules distinguish **Potential threat requiring evaluation**, **Insufficient
-information**, and **Threat requiring action before proceeding**. They never use
-numerical ethics scores or declare misconduct. Examples of conservative
-action-required triggers include a close active relationship intersecting with
-decision responsibility, pressure with a known consequence and decision
-responsibility, a reported pressure-related work change, or a significant
-commercial/direct personal incentive intersecting with decision responsibility.
-These are conditional implementation decisions, not universal professional
-thresholds or conclusions about the effectiveness of any response.
+The previous Phase 1–3 guided workflow remains available for compatibility through
+**Previous guided assessment (optional)** and **Previous guided example
+(optional)**. Existing saved stages, structured context, answer editing,
+superseded history and reports can continue there.
 
-Unknown/Other answers remain gaps. Missing links do not generate invented
-threats. No identified threat is not an assurance that threats are absent. No
-reported change to work does not remove possible future influence; a reported
-change does not establish that the work was technically wrong. When several
-threats are supported, the review explains possible interaction without treating
-the same underlying event as independent corroboration.
-
-The reasonable and informed third party test is explained and applied
-conditionally to the account. No actual independent third party reviews the
-case. Context is a **user-confirmed account**, selected answers are **recorded
-user answers**, and the narrative is a **reported account**. Limited extraction
-only proposes context before confirmation; ethical reasoning does not otherwise
-interpret the narrative.
-No independently verified evidence has been obtained by the app.
-
-If responsibility was already asked in Phase 1, it is reused, including an
-Unknown answer. Otherwise it is clarified only where a potential threat is
-supported. A further question records any basis for believing threats are
-addressed. Confidence, disclosure, documentation and proposed safeguards trigger
-a targeted challenge; none automatically lowers the outcome. Claiming changed
-circumstances does not establish new facts: edit the relevant structured answers
-to support reassessment. The initial evaluation examines assumptions; the Address
-stage then considers specific actions and the evidence of their effectiveness.
-
-Findings are computed afresh on every rerun. Changes to the underlying context
-or structured answers archive the dependent evaluation answers; changing an
-explanation alone does not drive reasoning. Current and superseded evaluation
-answers can be reviewed separately from Phase 1 history.
-
-### Remaining boundaries
-
-- The authored rules cover these three threat types within the available
-  structured choices; they do not exhaust every circumstance that can affect
-  Objectivity, assess every fundamental principle, or independently validate facts.
-- A conditional audit-independence/non-assurance-service boundary is shown for
-  audit-related work. The app does not infer audit scope from unrestricted text.
-- There is no durable storage, external fact verification, document authentication
-  or language-model feature. Reports remain conditional professional-judgment
-  support and are not certified ethical opinions.
-- Current authoritative standards, applicable jurisdiction and circumstances,
-  and professional judgment must inform real decisions. Rule content needs
-  professional review and maintenance; no fabricated source citations are used.
-
-## Try the three paths
-
-For each test, enter a scenario and role, parties and decision. Select the context
-below and confirm it. The optional CFO example activates all three paths together.
-
-| Path | Context selections | Answers to try | Expected difference |
-| --- | --- | --- | --- |
-| Familiarity | Close personal relationship; No known interest; No reported pressure | Frequent personal contact → decision involvement | Choose Little or no current personal contact instead to see a continuing-ties question. Answer No to end that branch. |
-| Self-interest | No relevant relationship; Commercial interest; No reported pressure | Contract renewal or client retention → commercial dependence | Edit interests to Personal financial interest to see personal benefit and financial-outcome questions instead. |
-| Intimidation | No relevant relationship; No known interest; Reported pressure or threatened consequences | Explicitly stated → consequence → work changed? | Select My interpretation only instead to see a supporting-information question. No further supporting information ends that branch without asserting the pressure is absent. |
-
-Edit a saved answer through the review panel to test a different branch. When a
-structured choice changes, dependent answers are archived and must be answered
-again if their questions return. Editing explanation text alone preserves later
-answers because text is not interpreted. Context changes reset the affected
-topic; changing the scenario, role, parties or decision resets all follow-ups.
-Superseded answers remain visible in read-only session history.
-
-## Phase 3: Address and report
-
-The Address stage presents the actual potential threats identified from the
-current account, with the structured facts supporting them. It does not treat
-every concern as proven bias. Action choices cover eliminating the circumstances,
-removal from the decision, independent review, escalation, disclosure,
-documentation, and declining or ending the activity where necessary. Choices
-and follow-ups are conditional on the threat and the user's preceding answers.
-Users can add supporting actions rather than being limited to a single measure.
-
-Implementation, timing, scope, authority, independence, effectiveness and
-supporting evidence are distinct matters. Merely reporting a concern, documenting
-it, requesting a review or describing a proposed safeguard cannot establish that
-the threat has been addressed. Reported external checking remains a **user
-account of an external check**, not independent verification by this application.
-Actions that have not worked leave a residual threat. Unknown details and
-unresolved earlier facts remain explicit.
-
-Residual conclusions apply the reasonable and informed third party test
-conditionally. The app may identify evidence supporting reduction where the
-recorded implementation and effectiveness checks support it; it never declares
-automatic compliance. Where the evidence is insufficient, acceptability is not
-established. Prior work affected by pressure needs attention even if the user is
-subsequently removed from the decision or the activity is ended. A measure
-addressing one incentive or threat does not automatically address other
-commercial/personal incentives or interacting threats.
-
-The report contains the scenario and confirmed context; reported facts and
-uncertainties; potential threats and supporting evidence; initial significance
-and combined-threat reasoning; the reasonable and informed third party test;
-proposed versus implemented actions; remaining threats and missing evidence;
-a conditional conclusion; prioritised next steps; and scope and professional
-judgment limitations. Engine references are presented in natural language rather
-than internal field names. Free-text contributions are quoted as user accounts,
-not treated as interpreted or authenticated evidence.
-
-Reports are rebuilt from current answers on every report-view rerun, including
-downloads. Changing upstream context or structured Phase 1/2 answers invalidates
-dependent Address answers and preserves their history. Editing action choices
-reopens affected follow-ups. No stale conclusion is silently reused. A downloaded
-file is a revision-specific snapshot and must be regenerated after changes.
-
-### Try the CFO scenario through all phases
-
-Load the example, review and confirm the context, and answer the Phase 1 questions:
-implied pressure; loss of a contract; no changed work; frequent personal contact;
-supervision/review responsibility; contract renewal; unknown commercial
-dependence. Review the three potential threats and record whether any claim is
-being made that they are already addressed. Then open **Address Threats**.
-
-Compare a requested or proposed review with an implemented review. Try an
-ineffective measure, inadequate reviewer independence or missing evidence, and
-check that acceptability remains unestablished. Record distinct actions against
-all relevant threats; familiarity measures must not silently eliminate the
-contract-related pressure or commercial incentive. Generate an interim report,
-edit an earlier answer, and regenerate it to inspect the changed reasoning.
+For an existing saved assessment, **Reassess this saved case with the
+scenario-driven workflow** offers an explicit opt-in conversion. Original
+Phase 1–3 source answers and archives remain intact; retained history is not a
+trusted conclusion. Clear structured information is reused as reported source
+information. Ambiguous ownership or category-level action coverage requires
+review before the new assessment can rely on it. The previous workflow's three
+threat categories are not silently expanded into unsupported new findings.
 
 ## Save & Resume
 
@@ -327,10 +191,10 @@ only after confirmation and acknowledgement. A content-free coordination record
 remains; it contains no scenario or answers. If deletion cannot be confirmed, the
 app says so and retains the current assessment.
 
-Each browser save stores the scenario, confirmed or draft context, submitted
-Step 2 clarification records, active answers
-and superseded history from all three phases, supporting-action slots and current
-workflow stage. It excludes widget state, evaluations and reports. Restoration
+Each browser save stores the current scenario, actor and source-fact ledger,
+submitted clarification answers, actions and evidence responses, source revisions
+and superseded history, review status and workflow stage. Legacy context, answers
+and supporting-action slots are retained when present. It excludes widget state, evaluations and reports. Restoration
 validates the records and recomputes dependency signatures, questions, findings
 and reports. Stale conditional answers are retained in history with a notice;
 an incompatible stage moves back to the necessary clarification. New widget
@@ -345,11 +209,12 @@ not add draft-text interpretation or change evidence status.
 **Download progress** exports UTF-8 JSON. **Import progress** first validates it
 without changing current work, then requires confirmation before restoration.
 The format has an application name, schema version and compatible rules version.
-New exports use schema 2 to include context clarification source records.
-Schema 1 backups and browser saves remain importable; they do not acquire
-invented clarification answers or confirmation. The browser storage slot is
-unchanged. Older deployed versions cannot read schema 2 until updated. The
-records contain source answers and dependency bindings, not trusted conclusions.
+New exports use **schema 3**, with scenario-driven source records in a separate
+`objectivity-case-v1` envelope. Schema 1 and 2 backups and browser saves remain
+importable and can continue in the previous guided workflow. They do not acquire
+invented answers, verification or conclusions. The browser storage slot is
+unchanged. Older application versions cannot read schema 3 until updated.
+Exports contain source answers and dependency bindings, not trusted conclusions.
 It uses allowlisted fields, structured-choice validation and bounded parsing:
 2 MiB maximum, bounded text/history/action counts and nesting. Duplicate fields,
 nonstandard numbers, unsupported versions, invalid evidence-status claims and
@@ -385,50 +250,51 @@ the component is blocked. A missing acknowledgement never means a save succeeded
   or proof that actions or independent checks actually occurred. All professional
   judgment and verification limitations continue to apply.
 
-The integrated application has been exercised in Chromium through all three
-phases, refresh and explicit resume, closing/reopening a persistent browser
-profile, confirmed clearing, actual JSON download/upload, and stale-tab conflict
-protection. These local tests do not establish that a live hosted deployment has
-been updated or independently tested. Further browser checks restarted the backend
-at the same origin, restored edited safeguard answers and superseded history,
-preserved corrupt copies until confirmed clearing, and verified usable JSON
-downloads when storage was blocked or full.
+The existing storage bridge has local Chromium coverage for refresh and explicit
+resume, closing/reopening a persistent browser profile, confirmed clearing, actual
+JSON download/upload, stale-tab conflicts, corrupt copies and blocked/full storage.
+The scenario-driven workflow adds source-codec, restoration and schema-migration
+regressions. Local tests do not establish that a hosted deployment has been updated
+or that every browser or embedding supports the storage component.
 
 ## Code structure
 
-- `app.py`: deployment entry point.
-- `objectivity/models.py`: context, answers and revision history, independent of Streamlit.
-- `objectivity/questions.py`: conditional question bank, selection and invalidation rules.
-- `objectivity/examples.py`: editable, authored CFO example.
-- `objectivity/extraction.py`: six-field suggestion orchestration and bounded-input validation.
-- `objectivity/extraction_entities.py`: local role, person/group/organisation and professional-activity patterns.
-- `objectivity/extraction_signals.py`: scoped relationship, financial/performance incentive and reported-pressure rules.
-- `objectivity/context_suggestions.py`: explicit selective replacement as an unconfirmed draft, retaining history.
-- `objectivity/intake.py`, `objectivity/intake_ui.py`: source-only adaptive context planning, editable summaries and progressive confirmation.
-- `objectivity/ui.py`: Streamlit forms, progress and review views.
-- `objectivity/evaluation.py`: pure, deterministic threat/significance reasoning and evidence links.
-- `objectivity/review.py`: conditional evaluation questions and review-answer invalidation/history.
-- `objectivity/evaluation_ui.py`: read-only provisional finding presentation.
-- `objectivity/address.py`: adaptive actions, implementation evidence, residual assessment and invalidation/history.
-- `objectivity/address_ui.py`: Address interaction and live report/download views.
-- `objectivity/report.py`: pure Markdown report generation and natural-language provenance labels.
-- `objectivity/progress.py`: bounded, versioned JSON codec and validated reconstruction of source records.
-- `objectivity/save_state.py`: acknowledgement and saved-version coordination.
-- `objectivity/progress_ui.py`: autosave, resume, confirmation and portable-backup controls.
-- `objectivity/browser_storage.py`, `objectivity/browser_component/index.html`: local vanilla-JavaScript storage bridge, without external assets.
-- `tests/test_engine.py`: pure domain and branching tests.
-- `tests/test_app.py`: Streamlit AppTest interaction tests.
-- `tests/test_evaluation.py`, `tests/test_review.py`, `tests/test_phase2_app.py`: Phase 2 reasoning, follow-up and interaction regressions.
-- `tests/test_address.py`, `tests/test_report.py`, `tests/test_phase3_app.py`: action effectiveness, report and all-phase interaction regressions.
-- `tests/test_progress.py`, `tests/test_save_state.py`, `tests/test_progress_ui.py`, `tests/test_browser_storage.py`: schema, restoration, acknowledgements, UI and storage-bridge regressions.
-- `tests/test_extraction*.py`: supported/ambiguous extraction, paraphrases, literal sources, attribution and negation regressions.
-- `tests/test_context_suggestions.py`, `tests/test_context_prefill_app.py`, `tests/test_general_prefill_app.py`: editable drafts, selective refresh, confirmation, all-phase invalidation, autosave/resume and JSON portability.
-- `tests/test_full_context_extraction_app.py`: full inventory, CFO, procurement and incomplete-scenario regressions, including both interest paths, disclosure instructions, persistence and all-phase reports.
-- `tests/test_intake.py`, `tests/test_intake_progress.py`, `tests/test_progressive_context_app.py`: unfamiliar work, adaptive clarification, beneficiary attribution, genuine uncertainty, edits, schema migration and restoration.
-
-Questions are selected by explicit conditions on context and prior answers, not a
-fixed questionnaire or keyword matching. Combined circumstances retain all
-applicable paths. Each question carries its own rationale and selectable options.
+- `app.py`: unchanged Streamlit/deployment entry point.
+- `objectivity/case_model.py`: provider-neutral actors, source facts, actions,
+  revisions, material questions and derived reasoning contracts.
+- `objectivity/understanding.py`: local English understanding provider and source
+  proposal validation. The provider interface permits a future implementation;
+  no model, external API or GenAI integration is present.
+- `objectivity/case_reasoning.py`: source-linked threat instances, material-gap
+  selection, significance, combined influences and third party reasoning.
+- `objectivity/case_workflow.py`: source correction, answer invalidation, action
+  updates and explicit conversion of legacy progress.
+- `objectivity/case_actions.py`: conditional evidence questions, action
+  effectiveness, residual threats and case-specific recommendations.
+- `objectivity/case_report.py`: current-snapshot nine-section Markdown report.
+- `objectivity/case_ui.py`: scenario-driven Identify, Evaluate, Address and report
+  interaction over the shared source model.
+- `objectivity/case_codec.py`, `objectivity/progress.py`: bounded versioned source
+  serialization, legacy compatibility and validated restoration.
+- `objectivity/ui.py`, `objectivity/models.py`: application routing and legacy
+  assessment state, with the new source case alongside existing state.
+- `objectivity/extraction*.py`: reusable role, actor, activity, ownership and
+  influence patterns used by local understanding and previous context suggestions.
+- `objectivity/intake*.py`, `objectivity/context_suggestions.py`: previous
+  progressive context suggestions and clarification.
+- `objectivity/questions.py`, `objectivity/evaluation*.py`, `objectivity/review.py`,
+  `objectivity/address*.py`, `objectivity/report.py`: previous guided assessment
+  logic and UI retained for saved-data compatibility.
+- `objectivity/save_state.py`, `objectivity/progress_ui.py`: save acknowledgements,
+  saved-version coordination, confirmations and import/export controls.
+- `objectivity/browser_storage.py`,
+  `objectivity/browser_component/index.html`: local storage bridge without
+  external assets or a build step.
+- `tests/test_case_*.py`, `tests/test_understanding.py`: new reasoning, source
+  attribution, material questioning, action evidence, report, UI, restoration and
+  migration regressions.
+- Other `tests/test_*.py`: retained Phase 1–3, extraction, progressive context,
+  save/resume, JavaScript bridge and UI regressions.
 
 ## Run checks
 
@@ -441,19 +307,46 @@ git diff --check
 ```
 
 The test runner uses Python's standard-library `unittest` and Streamlit's bundled
-AppTest. No additional test dependencies are required. Tests cover distinct and
-combined paths, Unknown/Other handling, validation, rerun persistence, answer and
-context edits, archive invalidation, cancellation and reset. Streamlit may print
-a harmless missing-ScriptRunContext warning when AppTest starts outside a server.
-The browser-bridge tests also run the actual JavaScript in Node when available;
-those specific JavaScript checks skip if Node is absent. Node is not an
-application/runtime dependency. Browser refresh/reopen and real uploads require
-the additional manual or headless-browser checks described above; AppTest alone
-does not establish browser persistence.
+AppTest; there is no new application or test dependency. AppTest may print a
+harmless missing-ScriptRunContext warning outside a server. Browser-bridge tests
+also exercise the actual JavaScript in Node when available; those checks skip
+if Node is absent. Node is not an application/runtime dependency. Real browser
+refresh/reopen, storage acknowledgements and file uploads require browser checks;
+AppTest alone cannot establish browser persistence.
+
+Representative cases include the CFO friendship/revenue/contract-renewal case;
+inventory recognition with separate personal bonus and company interests;
+procurement with distinct family and director interests; family employment with
+unknown participation; explicit self-review and advocacy; incomplete information;
+revised facts; planned, partial or failed actions; and appropriately evidenced
+conditional protection. Materially different answers must produce different
+qualified findings rather than one generic report.
+
+## Functional and professional limitations
+
+- Local English grammars do not understand unrestricted narratives. Unfamiliar
+  wording, actors, pronouns, attribution, negation and multiple decisions may be
+  missed or misclassified. Inspect source excerpts and use typed corrections;
+  the assistant must not be relied upon to discover every relevant circumstance.
+- Repeated questions are avoided only within the fact scopes represented by the
+  rules. Free-text explanations are not automatically converted to structured
+  evidence or professional conclusions. Explicit Unknown remains a limitation.
+- Positive action assessment is conditional on reported evidence and explicit
+  coverage. The app does not inspect documents, authenticate outcomes, verify
+  facts or provide professional validation or a certified ethical opinion.
+- Only Objectivity is assessed. Separate audit-independence and other professional
+  requirements may need their own assessment. Current authoritative standards,
+  jurisdiction and circumstances must inform real decisions. No fabricated
+  ACCA/IESBA paragraph references or complete Code-compliance claims are used.
+- Authored rules require maintenance and professional review. Human responsibility
+  for final judgment remains unchanged. The provider-neutral boundary prepares
+  for future work; it does not add generative AI in this phase.
+- Browser storage is local to one app origin/profile and may be unavailable or
+  lost. Keep JSON backups, use anonymised cases and review the privacy limits
+  above. There is no account, database or permanent server-side assessment store.
 
 The existing Streamlit deployment can retain `app.py` and the unchanged
-`requirements.txt`. Save & Resume adds only standard-library Python modules and
-a locally served component using Streamlit's existing v1 component API. No npm
-build or new Python dependency is required. Local startup and tests validate compatibility with the
+`requirements.txt` (`streamlit>=1.40,<2.0`). New assessment modules use only the
+standard library and existing Streamlit functionality. Local checks validate the
 installed runtime; they do not mean changes have been committed, pushed or
-deployed, or establish the status of a live hosted instance.
+deployed, or establish the state of any live production or preview app.

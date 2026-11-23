@@ -25,6 +25,7 @@ def as_legacy(value):
     value = deepcopy(value)
     value["schema_version"] = 1
     value["assessment"].pop("context_clarifications", None)
+    value["assessment"].pop("case_state", None)
     return value
 
 
@@ -34,8 +35,8 @@ class IntakeProgressCompatibilityTests(unittest.TestCase):
 
     def test_new_format_carries_an_explicit_empty_clarification_collection(self):
         value = document()
-        self.assertEqual(FORMAT_VERSION, 2)
-        self.assertEqual(value["schema_version"], 2)
+        self.assertEqual(FORMAT_VERSION, 3)
+        self.assertEqual(value["schema_version"], FORMAT_VERSION)
         self.assertEqual(value["assessment"]["context_clarifications"], {})
 
     def test_legacy_empty_assessment_migrates_without_confirmation(self):
@@ -68,7 +69,7 @@ class IntakeProgressCompatibilityTests(unittest.TestCase):
     def test_migrated_legacy_save_exports_as_the_current_schema(self):
         restored = self.restore(as_legacy(document()))
         current = json.loads(export_progress(restored.assessment, restored.review, restored.address, restored.view))
-        self.assertEqual(current["schema_version"], 2)
+        self.assertEqual(current["schema_version"], FORMAT_VERSION)
         self.assertIn("context_clarifications", current["assessment"])
 
     def test_future_schema_versions_remain_incompatible(self):
