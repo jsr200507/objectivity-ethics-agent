@@ -63,7 +63,7 @@ class ScenarioCaseAppTests(unittest.TestCase):
 
     def begin(self, scenario):
         self.widget("text_area", "Your scenario").input(scenario)
-        self.click("Identify potential threats")
+        self.click("Review scenario")
         self.assertEqual(self.app.session_state["view"], "identify")
         self.assertIsNotNone(self.case())
 
@@ -73,13 +73,27 @@ class ScenarioCaseAppTests(unittest.TestCase):
     def text(self):
         return "\n".join(
             item.value
-            for kind in ("markdown", "caption", "text", "info", "warning", "subheader", "success")
+            for kind in ("markdown", "caption", "text", "info", "warning", "subheader", "success", "header")
             for item in getattr(self.app, kind)
         )
 
     def reasoning(self):
         from objectivity.case_reasoning import reason_case
         return reason_case(self.case())
+
+    def main_text_without_expanders(self):
+        """Inspect the main reading path without optional source/edit records."""
+        values = []
+        def visit(node):
+            if getattr(node, 'type', '') == 'expander':
+                return
+            value = getattr(node, 'value', None)
+            if isinstance(value, str):
+                values.append(value)
+            for child in getattr(node, 'children', {}).values():
+                visit(child)
+        visit(self.app.main)
+        return '\n'.join(values)
 
     def round_trip(self):
         return import_progress(export_progress(
@@ -111,11 +125,13 @@ class ScenarioCaseAppTests(unittest.TestCase):
 
     def confirm_account(self):
         self.widget("checkbox", "These records reflect my account, including uncertainties.").check()
-        self.click("Confirm recorded account")
+        self.click("Confirm scenario and continue")
         self.assertTrue(self.case().reviewed)
+        self.assertEqual(self.app.session_state["view"], "case_evaluate")
 
     def to_actions(self):
-        self.click("Evaluate threats")
+        if self.app.session_state["view"] == "identify":
+            self.confirm_account()
         self.assertEqual(self.app.session_state["view"], "case_evaluate")
         self.click("Review existing actions")
         self.assertEqual(self.app.session_state["view"], "case_address")
@@ -162,7 +178,7 @@ class ScenarioCaseAppTests(unittest.TestCase):
             self.click("Record action evidence")
         self.fail("Complete review evidence must not create an endless follow-up loop")
 
-    def test_new_default_shows_supported_findings_before_confirmation(self):
+    def test_new_default_confirms_concise_account_before_main_threat_assessment(self):
         self.begin(EXAMPLE_SCENARIO)
         self.assertFalse(self.case().reviewed)
         self.assertFalse(self.app.session_state["assessment"].confirmed)
@@ -171,9 +187,14 @@ class ScenarioCaseAppTests(unittest.TestCase):
         self.assertNotIn("Self-review", kinds)
         self.assertNotIn("Advocacy", kinds)
         text = self.text().lower()
-        self.assertIn("provisional", text)
+        self.assertIn("understand your scenario", text)
         self.assertIn("objectivity", text)
         self.assertIn("not independently verified", text)
+        self.assertFalse(self.app.radio, "Confirmation must not turn into a mandatory questionnaire")
+        self.assertFalse(any("Potential " in item.value for item in self.app.subheader))
+        self.assertNotIn("Review existing actions", [button.label for button in self.app.button])
+        self.confirm_account()
+        self.assertIn("Step 2: Identify & Evaluate Threats", self.text())
         for threat in self.reasoning().threats:
             self.assertIn(threat.kind, self.text())
             self.assertTrue(threat.evidence_ids)
@@ -191,6 +212,90 @@ class ScenarioCaseAppTests(unittest.TestCase):
         self.assertTrue(any("contract" in fact.value.lower() for fact in interests))
         self.assertNotIn("Advocacy", {threat.kind for threat in self.reasoning().threats})
 
+    def test_confirmation_requires_acknowledgement_without_adding_questions(self):
+        self.begin(EXAMPLE_SCENARIO)
+        self.click('Confirm scenario and continue')
+        self.assertEqual(self.app.session_state['view'], 'identify')
+        self.assertFalse(self.case().reviewed)
+        self.assertTrue(self.app.warning)
+        self.assertFalse(self.app.radio)
+        self.confirm_account()
+        self.assertTrue(self.case().reviewed)
+        self.assertTrue(all(f.status != 'independently_verified' for f in self.case().facts))
+
+    def test_confirmation_summary_keeps_original_sources_and_technical_editing_optional(self):
+        self.begin(EXAMPLE_SCENARIO)
+        primary = self.main_text_without_expanders()
+        self.assertNotIn(EXAMPLE_SCENARIO, primary)
+        self.assertNotIn('answer.', primary)
+        self.assertNotIn('basis_signature', primary)
+        self.assertIn('CFO', primary)
+        self.assertIn('revenue', primary.lower())
+        self.assertTrue(self.app.expander)
+        for field in ('role', 'decision', 'pressure'):
+            fact = next(f for f in self.case().facts if f.predicate == field)
+            self.assertTrue(fact.excerpt, 'Editable suggestions retain their exact scenario source')
+
+    def test_one_guided_question_exposes_relevance_and_impact_in_the_main_reading_path(self):
+        self.begin(EXAMPLE_SCENARIO)
+        self.confirm_account()
+        question = self.reasoning().questions[0]
+        self.assertEqual(len(self.app.radio), 1)
+        self.assertEqual(self.app.radio[0].label, question.prompt)
+        primary = self.main_text_without_expanders()
+        self.assertIn(question.why, primary)
+        self.assertIn(question.impact, primary)
+        self.assertTrue(any(threat.kind in primary for threat in self.reasoning().threats
+                            if threat.id in question.threat_ids))
+
+    def test_recorded_unknown_participation_does_not_trigger_an_artificial_question(self):
+        self.begin(PROPERTY_EMPLOYMENT)
+        self.confirm_account()
+        self.assertFalse(self.reasoning().questions)
+        self.assertFalse(self.app.radio)
+        self.assertIn('Familiarity', self.text())
+        self.assertIn('Acceptability not established', self.text())
+        self.to_actions()
+        self.assertIn('What steps, if any, have you already taken to address these concerns?', self.text())
+
+    def test_acceptable_condition_is_retained_without_forced_safeguards_and_in_report(self):
+        from objectivity.address import AddressState
+        from objectivity.case_actions import action_questions, assess_actions
+        from objectivity.case_model import CaseActor, CaseFact, CaseState
+        from objectivity.case_reasoning import ACCEPTABLE
+        from objectivity.case_workflow import review_case
+        from objectivity.models import Assessment
+        from objectivity.review import ReviewState
+        case = CaseState(
+            'I review a valuation. I report a shareholding unrelated to this decision.',
+            actors=[CaseActor('user', 'You', 'Financial accountant'), CaseActor('firm', 'Other company', kind='organisation')],
+            facts=[
+                CaseFact('role', 'user', 'role', 'Financial accountant', source='user'),
+                CaseFact('decision', 'user', 'decision', 'Review an inventory valuation', source='user'),
+                CaseFact('shares', 'user', 'interest', 'Shareholding in an unrelated company', 'firm', source='user'),
+                CaseFact('connection', 'user', 'interest_connection', 'No', 'firm', source='user'),
+            ],
+        )
+        review_case(case)
+        self.restore(import_progress(export_progress(
+            Assessment(scenario=case.scenario, case_state=case), ReviewState(), AddressState(), 'case_evaluate',
+        )))
+        self.assertEqual(len(self.reasoning().threats), 1)
+        self.assertEqual(self.reasoning().evaluations[0].outcome, ACCEPTABLE)
+        self.assertFalse(self.app.radio)
+        self.assertIn('At an acceptable level', self.text())
+        self.to_actions()
+        self.assertFalse(action_questions(self.case()))
+        self.assertFalse(self.app.radio)
+        self.assertFalse(self.case().actions, 'Protective circumstances must not be invented as completed actions')
+        self.assertTrue(all(outcome.status == ACCEPTABLE for outcome in assess_actions(self.case()).outcomes))
+        self.click('Generate Objectivity report')
+        report = self.text()
+        self.assertIn('Self', report)
+        self.assertIn('At an acceptable level', report)
+        self.assertIn('ADDRESS', report)
+        self.assertNotIn('Effectiveness Established', report)
+
     def test_family_employment_does_not_invent_participation(self):
         self.begin(PROPERTY_EMPLOYMENT)
         case = self.case()
@@ -201,7 +306,7 @@ class ScenarioCaseAppTests(unittest.TestCase):
         self.assertIn("Familiarity", {threat.kind for threat in self.reasoning().threats})
         self.assertNotIn("Self-review", {threat.kind for threat in self.reasoning().threats})
 
-    def test_unfamiliar_scenario_can_reach_provisional_findings_without_six_field_form(self):
+    def test_unfamiliar_scenario_has_summary_without_six_mandatory_context_fields(self):
         self.begin(UNFAMILIAR)
         self.assertEqual(self.app.session_state["view"], "identify")
         self.assertFalse(self.case().reviewed)
@@ -210,6 +315,8 @@ class ScenarioCaseAppTests(unittest.TestCase):
             "Self-interest", "Self-review", "Advocacy", "Familiarity", "Intimidation",
         })
         self.assertNotIn("Confirm context and continue", [button.label for button in self.app.button])
+        self.assertFalse(self.app.radio)
+        self.assertIn("Confirm scenario and continue", [button.label for button in self.app.button])
 
     def test_source_ledger_and_stage_round_trip_without_importing_findings(self):
         self.begin(EXAMPLE_SCENARIO)
@@ -235,25 +342,50 @@ class ScenarioCaseAppTests(unittest.TestCase):
         self.assertFalse(any(action.stage == "Effectiveness Established" for action in actions))
         self.assertFalse(self.case().actions_reviewed)
 
+    def test_scenario_action_is_prefilled_for_review_instead_of_reentered(self):
+        self.begin(PLANNED_REVIEW)
+        original = deepcopy(self.case().actions[0])
+        self.to_actions()
+        self.assertEqual(self.widget('selectbox', 'Action record').value, original.id)
+        self.assertEqual(self.widget('text_area', 'What has been done or proposed?').value, original.description)
+        self.assertEqual(self.widget('selectbox', 'Reported action status').value, 'Planned')
+        self.assertFalse(self.app.radio, 'A known Planned action needs no implementation-evidence questionnaire')
+
+    def test_prefilled_detail_can_be_corrected_before_first_confirmation(self):
+        self.begin(EXAMPLE_SCENARIO)
+        role = next(f for f in self.case().facts if f.predicate == 'role')
+        self.widget('selectbox', 'Choose reported information to correct').select(role.id).run()
+        self.widget('text_area', 'Corrected detail').input('Engagement quality reviewer')
+        self.click('Save correction and reassess')
+        self.assertFalse(self.case().reviewed)
+        self.assertFalse(self.app.radio)
+        self.assertIn('Engagement quality reviewer', self.main_text_without_expanders())
+        self.assertTrue(any(f.id == role.id and f.value != 'Engagement quality reviewer'
+                            for f in self.case().fact_history))
+        self.confirm_account()
+        self.assertEqual(next(f.value for f in self.case().facts if f.id == role.id), 'Engagement quality reviewer')
+        self.assertEqual(self.round_trip().view, 'case_evaluate')
+
     def test_missing_information_does_not_block_evaluation_or_hide_qualified_report(self):
         self.begin(UNFAMILIAR)
         pending = [question.id for question in self.reasoning().questions]
         self.assertTrue(pending)
         self.to_actions()
         self.assertFalse(self.case().answers)
-        self.assertFalse(self.case().reviewed)
+        self.assertTrue(self.case().reviewed)
         self.assertEqual(pending, [question.id for question in self.reasoning().questions])
         self.click("Existing actions are not known")
         self.assertFalse(self.case().actions, "Unknown action history is not a declaration of no action")
         self.click("Generate Objectivity report")
         self.assertEqual(self.app.session_state["view"], "case_report")
         report = self.text()
-        self.assertIn("Provisional assessment", report)
+        self.assertIn("Conditional assessment", report)
         self.assertIn("unknown", report.lower())
         self.assertNotIn("Effectiveness Established", report)
 
     def test_explicit_unknowns_are_not_repeated_and_survive_progress_restore(self):
         self.begin(UNFAMILIAR)
+        self.confirm_account()
         answered = []
         for _ in range(10):
             if not self.reasoning().questions:
@@ -277,6 +409,7 @@ class ScenarioCaseAppTests(unittest.TestCase):
 
     def test_source_correction_recalculates_findings_and_archives_only_dependent_answers(self):
         self.begin(EXAMPLE_SCENARIO)
+        self.confirm_account()
         responsibility = self.answer_material("I supervise or review the work")
         pressure_question = self.reasoning().questions[0]
         self.assertEqual(pressure_question.predicate, "work_changed")
@@ -297,6 +430,7 @@ class ScenarioCaseAppTests(unittest.TestCase):
         self.assertTrue(any(fact.id == pressure.id and fact.status == "reported"
                             for fact in self.case().fact_history))
         self.assertFalse(self.case().reviewed)
+        self.assertFalse(self.app.radio, "Corrected facts need review before ethical questioning resumes")
         restored = self.round_trip().assessment.case_state
         self.assertEqual(restored.history, self.case().history)
         self.assertNotIn(pressure_question.id, restored.answers)
@@ -453,13 +587,13 @@ class ScenarioCaseAppTests(unittest.TestCase):
         self.assertFalse(self.case().reviewed)
         self.assertTrue(self.reasoning().threats)
 
-    def test_acknowledged_autosave_restores_new_case_without_reconfirmation(self):
+    def test_acknowledged_autosave_restores_unconfirmed_summary_for_explicit_resume(self):
         store = AcknowledgedBrowserStore()
         self.bridge_patch.stop()
         with patch("objectivity.progress_ui.browser_storage", side_effect=store):
             first = AppTest.from_file(str(APP), default_timeout=15).run()
             next(widget for widget in first.text_area if widget.label == "Your scenario").input(EXAMPLE_SCENARIO)
-            next(widget for widget in first.button if widget.label == "Identify potential threats").click().run()
+            next(widget for widget in first.button if widget.label == "Review scenario").click().run()
             for _ in range(5):
                 first.run()
             self.assertIsNotNone(store.data)
@@ -472,6 +606,27 @@ class ScenarioCaseAppTests(unittest.TestCase):
             self.assertEqual(len(second.exception), 0)
             self.assertEqual(second.session_state["view"], "identify")
             self.assertEqual(second.session_state["assessment"].case_state, saved.assessment.case_state)
+
+    def test_acknowledged_autosave_preserves_confirmation_and_combined_stage_on_resume(self):
+        store = AcknowledgedBrowserStore()
+        self.bridge_patch.stop()
+        with patch('objectivity.progress_ui.browser_storage', side_effect=store):
+            first = AppTest.from_file(str(APP), default_timeout=15).run()
+            next(w for w in first.text_area if w.label == 'Your scenario').input(PROPERTY_EMPLOYMENT)
+            next(w for w in first.button if w.label == 'Review scenario').click().run()
+            next(w for w in first.checkbox if w.label == 'These records reflect my account, including uncertainties.').check()
+            next(w for w in first.button if w.label == 'Confirm scenario and continue').click().run()
+            for _ in range(5):
+                first.run()
+            saved = import_progress(store.data)
+            self.assertEqual(saved.view, 'case_evaluate')
+            self.assertTrue(saved.assessment.case_state.reviewed)
+            second = AppTest.from_file(str(APP), default_timeout=15).run()
+            next(w for w in second.button if w.label == 'Resume previous assessment').click().run()
+            self.assertFalse(second.exception)
+            self.assertEqual(second.session_state['view'], 'case_evaluate')
+            self.assertEqual(second.session_state['assessment'].case_state, saved.assessment.case_state)
+            self.assertFalse(second.radio, 'Reopening must not invent a question already recorded as Unknown')
 
 
 if __name__ == "__main__":

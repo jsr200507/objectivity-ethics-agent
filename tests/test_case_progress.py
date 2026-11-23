@@ -59,13 +59,27 @@ class CaseProgressRoundTripTests(unittest.TestCase):
         self.assertFalse(restored.assessment.case_state.reviewed)
         self.assertFalse(restored.assessment.confirmed)
 
-    def test_all_case_views_allow_qualified_analysis_before_global_confirmation(self):
+    def test_unreviewed_case_views_restore_to_scenario_confirmation_without_losing_sources(self):
         for view in ('identify', 'case_evaluate', 'case_address', 'case_report'):
             with self.subTest(view=view):
                 restored = import_progress(json.dumps(document(view=view)))
-                self.assertEqual(restored.view, view)
+                self.assertEqual(restored.view, 'identify')
                 self.assertFalse(restored.assessment.confirmed)
                 self.assertFalse(restored.assessment.case_state.reviewed)
+                self.assertEqual(restored.assessment.case_state, sample_case())
+                if view != 'identify':
+                    self.assertTrue(restored.warnings)
+
+    def test_reviewed_case_views_restore_without_requiring_every_material_answer(self):
+        from objectivity.case_workflow import review_case
+        case = sample_case()
+        review_case(case)
+        for view in ('identify', 'case_evaluate', 'case_address', 'case_report'):
+            with self.subTest(view=view):
+                restored = import_progress(json.dumps(document(case=case, view=view)))
+                self.assertEqual(restored.view, view)
+                self.assertTrue(restored.assessment.case_state.reviewed)
+                self.assertFalse(restored.assessment.case_state.answers)
 
     def test_case_report_view_without_source_records_moves_back_with_notice(self):
         value = json.loads(export_progress(Assessment(), ReviewState(), AddressState(), 'scenario'))

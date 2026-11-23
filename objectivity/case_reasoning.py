@@ -13,9 +13,12 @@ from .case_model import (
     ThreatInstance,
 )
 
-ACTION_REQUIRED = "Action needed before proceeding"
+ACCEPTABLE = "At an acceptable level"
+ACTION_REQUIRED = "Not at an acceptable level"
 NOT_ESTABLISHED = "Acceptability not established"
-NARROWED = "No direct influence established on the recorded account"
+# Retain the imported name for callers while requiring supporting scoped
+# circumstances before a narrowed finding can be treated as acceptable.
+NARROWED = ACCEPTABLE
 YES_NO = ("Yes", "No", "Unknown")
 RESPONSIBILITY = (
     "I make or recommend the decision", "I supervise or review the work",
@@ -188,10 +191,11 @@ def reason_case(case: CaseState) -> ReasoningSnapshot:
             continue
         link = known("interest_connection", fact.subject, fact.object_id, fact.decision_id)
         if _is_no(link):
-            limitations.append(f"The recorded interest of {actor(fact.subject)} was stated not to connect to this decision; it is not treated as an established Objectivity threat here.")
-            continue
+            limitations.append(f"The recorded interest of {actor(fact.subject)} was stated not to connect to this decision; the considered source remains visible with its narrowed evaluation.")
         if fact.subject == "user":
-            mechanism = f"{_possessive(case, fact.subject).capitalize()} reported {fact.value} could favour an outcome of {_decision(facts, fact.decision_id)} that benefits you financially."
+            career = any(term in fact.value.casefold() for term in ('promotion','career','job security','demotion','dismissal'))
+            benefit = 'affects your career prospects; a financial benefit is not assumed' if career else 'benefits you financially'
+            mechanism = f"{_possessive(case, fact.subject).capitalize()} reported {fact.value} could favour an outcome of {_decision(facts, fact.decision_id)} that {benefit}."
         else:
             relation = next((r for r in facts if r.predicate in {"family_relationship", "close_relationship"} and r.object_id == fact.subject and _affirmed(r)), None)
             if relation:
@@ -209,8 +213,7 @@ def reason_case(case: CaseState) -> ReasoningSnapshot:
         related = fact.object_id
         activity = known("relationship_active", fact.subject, related, fact.decision_id)
         if _is_no(activity):
-            limitations.append(f"No continuing relevant tie with {actor(related)} is reported; a historical relationship is not treated as an active familiarity source.")
-            continue
+            limitations.append(f"No continuing relevant tie with {actor(related)} is reported; the historical relationship remains visible so the basis for its evaluation can be reviewed.")
         employment = next((e for e in facts if e.predicate == "employment" and e.subject == related and e.decision_id == fact.decision_id and _affirmed(e)), None)
         if employment:
             org = actor(employment.object_id)
@@ -238,7 +241,8 @@ def reason_case(case: CaseState) -> ReasoningSnapshot:
             append("Advocacy", fact,
                 f"The reported promotion or representation of a position ({fact.value}) could make it harder for {actor(fact.subject)} to assess that position objectively in {_decision(facts, fact.decision_id)}. Routine communication is not automatically advocacy.")
 
-    for threat in threats:
+    acceptable_ids = set()
+    for index, threat in enumerate(threats):
         source = next(f for f in facts if f.id == threat.evidence_ids[0])
         decision = _decision(facts, threat.decision_id)
         responsibility = known("decision_responsibility", "user", "", threat.decision_id)
@@ -259,7 +263,7 @@ def reason_case(case: CaseState) -> ReasoningSnapshot:
             gaps.append("Your decision-making or review responsibility is not established.")
         elif no_involvement:
             reasons.append("You report no involvement in this decision; that narrows the current effect on your own professional judgment but does not validate the work or settle other obligations.")
-            outcome = NARROWED
+            outcome = NOT_ESTABLISHED
         else:
             reasons.append("The recorded professional involvement connects this source of influence to your judgment.")
 
@@ -288,7 +292,7 @@ def reason_case(case: CaseState) -> ReasoningSnapshot:
                         "Current ties or obligations can strengthen the influence mechanism; no relevant current tie narrows it.",priority=2)
                 if source.predicate == "family_relationship" and _unknown(activity):
                     gaps.append(f"The current relevance of personal ties with {actor(relative)} remains uncertain.")
-                elif _is_yes(activity) or source.predicate == "close_relationship":
+                elif _is_yes(activity) or source.predicate == "close_relationship" and not _is_no(activity):
                     reasons.append("An active or explicitly close personal connection is reported; actual bias is not inferred.")
                     if involved: outcome = ACTION_REQUIRED
         elif threat.kind == "Self-interest":
@@ -315,10 +319,11 @@ def reason_case(case: CaseState) -> ReasoningSnapshot:
                     if _unknown(dependence): gaps.append("The commercial dependence affecting the appropriate response is not established.")
         elif threat.kind == "Intimidation":
             changed = known("work_changed", "user", source.subject, threat.decision_id)
-            add_question(threat, "work_changed", "user", source.subject,
-                f"Has any work or recommendation already changed in response to the reported influence from {actor(source.subject)}?",
-                "The scenario records influence, but does not establish whether professional work has already been affected.",
-                "A reported change may require correction of prior work as well as protection against future influence; No does not remove possible future influence.",priority=1)
+            if not no_involvement:
+                add_question(threat, "work_changed", "user", source.subject,
+                    f"Has any work or recommendation already changed in response to the reported influence from {actor(source.subject)}?",
+                    "The scenario records influence, but does not establish whether professional work has already been affected.",
+                    "A reported change may require correction of prior work as well as protection against future influence; No does not remove possible future influence.",priority=1)
             if _unknown(changed): gaps.append("Whether work has already changed in response to this influence is unresolved.")
             elif _is_yes(changed):
                 reasons.append("A change to work is reported. The affected judgment and any correction need attention; this does not establish technical error or misconduct.")
@@ -332,16 +337,89 @@ def reason_case(case: CaseState) -> ReasoningSnapshot:
             reasons.append("The specific prior-work or promoted-position connection, rather than a generic professional role, supports this potential threat.")
             if involved: outcome = ACTION_REQUIRED
 
+        # Narrow, explicit existing circumstances can justify no additional
+        # safeguard. Keep the considered source and explain the whole basis;
+        # confidence, user review and an action's claimed stage never supply it.
+        protective = []
+        supporting = []
+        if threat.kind == 'Self-interest':
+            connection = known('interest_connection', source.subject, source.object_id, threat.decision_id)
+            if _is_no(connection):
+                gaps = []  # Role/dependence cannot make this unrelated benefit relevant.
+                protective.append(f"The recorded outcome cannot affect {actor(source.subject)}'s reported interest. On that specific account, the incentive has no route to influence this decision; no additional safeguard is indicated for this source.")
+                supporting.append(connection)
+        elif threat.kind == 'Familiarity':
+            activity = known('relationship_active', source.subject, source.object_id, threat.decision_id)
+            if _is_no(activity):
+                employment = next((f for f in facts if f.id in threat.evidence_ids and f.predicate == 'employment'), None)
+                participation = known('participation', source.object_id, employment.object_id, threat.decision_id) if employment else None
+                financial = [f for f in facts if f.predicate == 'interest' and f.subject == source.object_id and _affirmed(f)
+                    and f.decision_id == threat.decision_id and not _is_no(known('interest_connection', f.subject, f.object_id, f.decision_id))]
+                if financial:
+                    gaps.append('The stated absence of current personal ties does not resolve the related person’s reported financial connection to this decision.')
+                    outcome = NOT_ESTABLISHED
+                elif employment and not _is_no(participation):
+                    gaps.append('The historical relationship has no reported current personal ties, but participation in the connected work has not been excluded.')
+                    outcome = NOT_ESTABLISHED
+                else:
+                    gaps = []
+                    protective.append(f"No current personal ties or obligations with {actor(source.object_id)} are reported, and no remaining participation or financial connection supports this familiarity mechanism. On that specific account, no additional safeguard is indicated for this source.")
+                    supporting.extend(f for f in (activity, participation) if f is not None)
+
+        if no_involvement and not protective:
+            prior = known('prior_work_affected', 'user', '', threat.decision_id)
+            changed = known('work_changed', 'user', source.subject if threat.kind == 'Intimidation' else '', threat.decision_id)
+            if implied_involvement:
+                gaps.append('The stated lack of involvement conflicts with the recorded current assessment of your own earlier work or promoted position; resolve that account before relying on it.')
+                outcome = NOT_ESTABLISHED
+            elif _is_yes(prior) or _is_yes(changed):
+                gaps.append('The stated lack of current involvement does not resolve earlier affected work; that work requires attention before proceeding.')
+                outcome = ACTION_REQUIRED
+            elif _is_no(prior) or _is_no(changed):
+                gaps = []
+                protective.append('You report no involvement in this decision and no earlier affected work. Those specific existing circumstances remove the route for this source to impair your current professional judgment; no additional safeguard is indicated for this source. This does not validate another person’s work or settle separate obligations.')
+                supporting.extend(f for f in (responsibility, prior, changed) if f is not None)
+            else:
+                gaps.append('Whether earlier professional work was affected remains unresolved; lack of current involvement alone is not sufficient.')
+                add_question(threat, 'prior_work_affected', 'user', '',
+                    'Was any earlier professional work you prepared or reviewed affected by these circumstances?',
+                    'You have reported no current decision involvement. Earlier affected work could still require a response.',
+                    'No earlier affected work may support no additional safeguard for your current role; Yes or Unknown prevents that conclusion.',priority=1)
+
+        if protective:
+            affected = [f for f in facts if f.decision_id == threat.decision_id
+                and f.predicate in {'prior_work_affected','work_changed'} and _is_yes(f)
+                and (not f.object_id or f.object_id == threat.subject)]
+            current_decision = known('decision', 'user', '', threat.decision_id)
+            if affected:
+                outcome = ACTION_REQUIRED
+                gaps.append('Reported affected work conflicts with the stated protective circumstances; resolve the affected work before relying on a favourable conclusion.')
+                supporting.extend(affected)
+            elif current_decision is None or not _affirmed(current_decision):
+                outcome = NOT_ESTABLISHED
+                gaps.append('The affected professional decision is not sufficiently established to rely on the stated protective circumstances.')
+            else:
+                outcome = ACCEPTABLE
+                reasons.extend(protective)
+                acceptable_ids.add(threat.id)
+            if supporting:
+                threat = ThreatInstance(threat.id, threat.kind, threat.subject, threat.decision_id, threat.mechanism,
+                    _unique((*threat.evidence_ids, *(f.id for f in supporting))), threat.uncertainty)
+                threats[index] = threat
+
         if not case.reviewed:
             reasons.append("These source facts have not yet been reviewed as the user's account; the identification remains provisional.")
         if any(f.status == "disputed" for f in facts if f.id in threat.evidence_ids):
             gaps.append("Material source information is disputed.")
+            if outcome == ACCEPTABLE:
+                outcome = NOT_ESTABLISHED
+                acceptable_ids.discard(threat.id)
         subject_phrase = "your recorded connection" if threat.subject == "user" else actor(threat.subject) + "'s recorded connection"
         concern = f"A reasonable and informed third party would consider {subject_phrase} to {decision}: {threat.mechanism} "
         if outcome == ACTION_REQUIRED:
             concern += "On this account, proceeding requires a response addressing that specific influence; actual bias need not be proved. "
-        elif outcome == NARROWED:
-            concern += "The recorded lack of involvement narrows the effect on your current judgment; it is not a general assurance of Objectivity. "
+        elif outcome == ACCEPTABLE:
+            concern += "On the specific recorded nonconnection or protective circumstances, a reasonable and informed third party could regard this considered source as being at an acceptable level without an additional safeguard. This is conditional on the account, not a general assurance of Objectivity or an independent review. "
         else:
             concern += "The recorded facts do not yet justify concluding that Objectivity is appropriately protected. "
         if gaps:
@@ -365,5 +443,13 @@ def reason_case(case: CaseState) -> ReasoningSnapshot:
         "This assessment concerns Objectivity only and does not certify compliance, establish misconduct or independently verify the account.",
         "For audit work, separate audit-independence and other applicable professional requirements need their own assessment.",
     ))
-    ordered = tuple(sorted(questions.values(), key=lambda q: (q.priority, q.predicate != "decision", q.id)))
+    relevant = []
+    for question in questions.values():
+        current = tuple(id for id in question.threat_ids if id not in acceptable_ids)
+        if question.threat_ids and not current:
+            continue
+        relevant.append(MaterialQuestion(question.id, question.prompt, question.options, question.why,
+            question.impact, question.predicate, question.subject, question.object_id, question.decision_id,
+            question.depends_on, current, question.priority))
+    ordered = tuple(sorted(relevant, key=lambda q: (q.priority, q.predicate != "decision", q.id)))
     return ReasoningSnapshot(tuple(threats), tuple(evaluations), ordered, _unique(interactions), _unique(limitations))

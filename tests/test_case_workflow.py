@@ -161,4 +161,4 @@ class CaseWorkflowTests(unittest.TestCase):
     def test_no_involvement_avoids_immaterial_depth_but_checks_possible_earlier_work(self):
         case = start_case('I review a supplier selection. My sister owns shares in the supplier. The CFO warns that my job depends on favouring the supplier.')
         add_case_fact(case, 'user', 'decision_responsibility', 'I have no involvement in this decision')
-        self.assertEqual([q.predicate for q in reason_case(case).questions], ['work_changed'])
+        self.assertEqual([q.predicate for q in reason_case(case).questions], ['prior_work_affected'])

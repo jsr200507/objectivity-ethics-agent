@@ -139,7 +139,11 @@ class CaseReasoningTests(unittest.TestCase):
             fact('stake','interest','Shareholding',object_id='supplier'),
             fact('link','interest_connection','No',object_id='supplier'),
         ))
-        self.assertFalse(result.threats)
+        # Keep a considered source visible so a favourable evaluation has an
+        # inspectable basis rather than silently disappearing from the report.
+        self.assertEqual([item.kind for item in result.threats], ['Self-interest'])
+        self.assertEqual(result.evaluations[0].outcome, NARROWED)
+        self.assertFalse(result.questions)
         self.assertIn('not to connect',' '.join(result.limitations))
 
     def test_known_bonus_connection_is_not_requested_again(self):

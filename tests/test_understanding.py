@@ -101,8 +101,10 @@ class UnderstandingTests(unittest.TestCase):
     def test_procurement_does_not_assign_family_or_director_money_to_user(self):
         result=self.understand(PROCUREMENT)
         interests=self.facts(result,'interest')
-        self.assertEqual(len(interests),2)
-        self.assertNotIn('user',{f.subject for f in interests})
+        financial=[f for f in interests if 'career' not in f.value.lower()]
+        self.assertEqual(len(financial),2)
+        self.assertNotIn('user',{f.subject for f in financial})
+        self.assertTrue(any(f.subject=='user' and 'career' in f.value.lower() for f in interests))
         self.assertIn('family_sister',{f.subject for f in interests})
         fee=next(f for f in interests if 'fee' in f.value)
         self.assertIn('director',{a.id:a for a in result.actors}[fee.subject].label)

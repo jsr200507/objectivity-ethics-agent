@@ -54,11 +54,11 @@ def _key(name: str) -> str:
 
 
 def _scenario_view(assessment: Assessment) -> None:
-    st.caption("Identify · Describe the professional decision")
+    st.caption("Scenario Input → Understand → Identify & Evaluate → Address → Report")
     st.subheader("What situation would you like to explore?")
     st.write(
         "Describe the decision, the people involved and any actions already taken. "
-        "You will see provisional findings first, then clarify only material gaps."
+        "First review a concise summary, then explore the threats and any material gaps."
     )
     if st.button("Try CFO example"):
         st.session_state.assessment = Assessment(scenario=EXAMPLE_SCENARIO, case_state=start_case(EXAMPLE_SCENARIO))
@@ -75,7 +75,7 @@ def _scenario_view(assessment: Assessment) -> None:
             placeholder="Describe the professional work, relevant circumstances and what has happened…",
             key=_key("scenario"),
         )
-        identify = st.form_submit_button("Identify potential threats")
+        identify = st.form_submit_button("Review scenario")
         with st.expander("Previous guided assessment (optional)"):
             st.caption("Use the earlier context-confirmation workflow, including for saved assessments.")
             submitted = st.form_submit_button("Continue to context confirmation")
@@ -475,7 +475,7 @@ def render_app() -> None:
     )
     with st.sidebar:
         st.subheader("Your session")
-        st.write("Identify → Evaluate → Address → Report")
+        st.write("Scenario → Understand → Identify & Evaluate → Address → Report")
         waiting_for_resume = render_save_resume()
     if waiting_for_resume:
         if "_progress_intent" in st.session_state:

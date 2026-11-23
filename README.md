@@ -4,11 +4,14 @@ A Python and Streamlit assistant focused exclusively on the fundamental principl
 of **Objectivity**. It follows **Identify → Evaluate → Address** and supports,
 rather than replaces, professional judgment.
 
-The scenario-driven workflow provides immediate provisional findings, focused
-clarification, evidence-linked evaluation of existing actions, residual-threat
-reasoning and a downloadable Ethical Assessment Report. It uses free,
-open-source packages, with no paid APIs, subscriptions, API keys or external AI
-services. It does not provide generative AI or independent fact verification.
+The scenario-driven workflow begins with a concise, prefilled summary for review,
+then combines threat identification and evaluation in a guided stage. It adds
+evidence-linked assessment of existing actions, residual-threat reasoning and a
+downloadable Ethical Assessment Report. It uses free, open-source packages and
+runs without API keys, subscriptions or external services. Scenario understanding,
+ethical evaluation, safeguard assessment and reports are rule-based. Task 1 does
+not integrate GenAI or call an external API. No facts or conclusions are
+independently verified by the application.
 
 ## Run locally
 
@@ -32,30 +35,45 @@ command also targets `app.py`.
 
 ## Current user workflow
 
-1. Enter a scenario and select **Identify potential threats**, or choose
-   **Try CFO example**. Provisional Objectivity findings appear immediately;
-   confirmation of a long context form is not a prerequisite.
-2. Inspect each finding's reported source and mechanism. Open **Review or correct
-   reported information** to correct the meaning, evidence status or parties, or
-   add a missing party or explicitly typed fact. Confirm that the source records
-   reflect your account, including uncertainties.
-3. Answer the single active material question using **Record answer and reassess**.
-   **Why this matters** explains how it could affect the assessment. Questions
-   reuse recorded facts and target unresolved decision links rather than following
-   one fixed category questionnaire. An explicit **Unknown** is retained as a
-   limitation and is not repeatedly asked.
-4. Select **Evaluate threats** to review the evidence-linked significance and
-   hypothetical reasonable and informed third party assessment. You can proceed
-   with recorded gaps; the result remains qualified rather than inventing answers
-   or forcing irrelevant questions.
-5. Select **Review existing actions**. Review actions recognised in the account,
-   record additional actions and identify the specific sources they address.
-   Distinguish **Unknown**, **Not Taken**, **Planned** and **Implemented**.
+**Scenario Input → Step 1: Understand Your Scenario → Step 2: Identify & Evaluate
+Threats → Step 3: Address Threats → Final Ethical Assessment Report**
+
+1. Enter a scenario and select **Review scenario**, or choose **Try CFO example**.
+   Step 1 automatically prefills six concise summary sections: professional role
+   and decision; people and relationships; financial, commercial and career
+   interests; reported pressure or influence; material uncertainties; and actions
+   already mentioned. Uncertain information is highlighted. The original narrative
+   and detailed source records stay in optional expandable sections.
+2. Use **Correct or add details** if anything is missing or inaccurate. Inspect
+   **Source excerpts and detailed records**, correct an individual fact's meaning,
+   evidence status or parties, or add a missing party or explicitly typed fact.
+   Tick **These records reflect my account, including uncertainties.**, then select
+   **Confirm scenario and continue**. This is one account-confirmation step, not
+   independent verification of the events.
+3. In **Step 2: Identify & Evaluate Threats**, the active material question is the
+   main interaction. It names the relevant threats, explains **Why this question?**
+   and how the answer could affect the evaluation. Select **Record answer and
+   reassess** to update the findings. Known facts are reused; an explicit
+   **Unknown** remains a limitation and is not repeatedly asked. Where no material
+   clarification is needed, the app explains the evaluation without inventing a
+   question.
+4. Review the current threat categories, scenario-specific mechanisms, acceptable-
+   level assessments and uncertainties. Supporting sources and the hypothetical
+   reasonable and informed third party reasoning are available in an expander.
+   Use **Review scenario summary** to revisit the account. Material corrections
+   return to Step 1 for confirmation and recalculate dependent findings.
+5. Select **Review existing actions** to open **Step 3: Address Threats**:
+   “What steps, if any, have you already taken to address these concerns?” Actions
+   recognised in the scenario are prefilled for review. Describe an action and
+   explicitly choose its type, status and threat coverage rather than repeating
+   facts already recorded. **No relevant action has been taken** and **Existing
+   actions are not known** are available where relevant.
 6. Answer only the action-evidence questions currently material to effectiveness.
-   Correct earlier evidence through the action editor when new information emerges.
-   Review the resulting residual findings and prioritised next steps before
-   proceeding, arranging a different response or considering declining/ending the
-   activity subject to relevant obligations.
+   Correct earlier evidence through the action editor as new information emerges.
+   Review current protection, residual concerns and scenario-specific next steps.
+   If the recorded circumstances already justify an acceptable-level assessment,
+   the app explains why and does not force additional safeguards or an artificial
+   implementation questionnaire.
 7. Select **Generate Objectivity report** and download Markdown if required.
    Revisit source facts or actions to recalculate the report. A downloaded report
    is a revision-specific snapshot and must be regenerated after material changes.
@@ -63,17 +81,23 @@ command also targets `app.py`.
    in the same browser profile, choose **Resume previous assessment**. Use
    **Import progress** to restore a backup elsewhere.
 
-Only submitted form values are saved. Unsubmitted text and unsaved edits are not
-part of autosave or exported progress.
+The stage indicator explains where you are in the journey. On explicit navigation,
+the current stage is brought into view so its question is visible; ordinary
+record-editing reruns do not force a scroll jump. Identify and Evaluate share one
+user-facing stage while remaining distinct reasoning operations and report
+sections. Only submitted form values are saved; unsubmitted text and unsaved edits
+are not part of autosave or exported progress.
 
 ## Evidence and Objectivity reasoning
 
-The local understanding layer proposes actors, professional activities,
+The local understanding provider proposes actors, professional activities,
 relationships, actual beneficiaries, reported influence and existing actions.
-Supported narrative proposals retain literal source excerpts. The understanding
-provider does not issue ethical verdicts. Authored reasoning rules consume the
-source ledger and generate distinct threat instances tied to the relevant actor,
-decision and source information.
+Supported narrative proposals retain literal source excerpts. The provider does
+not issue ethical verdicts. Users must review the concise account before the
+main ethical assessment. Source validation and attribution rules reduce specific
+errors; they do not prove that every interpretation is accurate. Authored reasoning
+rules consume the source ledger and generate distinct threat instances tied to
+the relevant actor, decision and source information.
 
 | Potential threat | Evidence-supported mechanism |
 | --- | --- |
@@ -98,12 +122,21 @@ account; it is **not independent verification**. Possible future recovery or an
 assurance by management remains an attributed claim. Extra explanatory text is
 retained as reported context and is not automatically interpreted into new facts.
 
-Evaluation distinguishes **Acceptability not established**, **Action needed before
-proceeding** and **No direct influence established on the recorded account** where
-appropriate. These are conditional implementation outcomes, not numerical ethics
-scores or declarations of misconduct. Missing information or no identified threat
-is not assurance that threats are absent. A reported change to work differs from
+Evaluation distinguishes **At an acceptable level**, **Not at an acceptable
+level** and **Acceptability not established**. These are evidence-linked,
+conditional outcomes, not numerical ethics scores or declarations of misconduct.
+Missing information or no identified threat is not assurance that threats are
+absent. A reported change to work differs from
 possible future influence and does not itself prove technical error.
+
+An acceptable-level outcome requires specific recorded circumstances that remove
+or sufficiently narrow the source's route to influence this decision. Examples
+include an explicitly unrelated financial interest, or no current involvement
+with no earlier work affected. A historical relationship without current ties
+cannot justify that outcome if a relevant participation or financial link remains
+unresolved. These considered threats remain visible in the evaluation and report,
+with the supporting reasons; they are not silently discarded. User confidence,
+confirmation and reported implementation alone cannot establish acceptability.
 
 The reasonable and informed third party test asks how a hypothetical reasonable
 and informed person would assess the recorded circumstances and protective
@@ -112,9 +145,13 @@ no actual independent third party has reviewed the application's findings.
 
 ## Existing actions, effectiveness and residual threats
 
-Address begins with what has already happened or been proposed. An omitted action
-is not treated as proof that no action was taken. Users can link several actions
-to particular threat instances rather than one category-wide response silently
+Address begins with the conversational prompt about what has already happened or
+been proposed, with reported actions prefilled for review. An omitted action is
+not treated as proof that no action was taken. Distinct source statuses are
+**Not Taken**, **Planned**, **Implemented** and **Unknown**; effectiveness supported
+by appropriate evidence is a derived, conditional finding rather than a status a
+user can grant an action. Users can link several actions to particular threat
+instances rather than one category-wide response silently
 covering all sources.
 
 Implementation and effectiveness are separate. A requested review remains
@@ -131,7 +168,9 @@ automatically effective safeguards. The resulting protective measure needs its
 own assessment. A known weakness, partial implementation, continuing influence,
 missing scope or explicit Unknown prevents an unsupported positive conclusion.
 Evidence questions stop at a material blocker instead of completing an irrelevant
-checklist; the editor permits revisiting that answer later.
+checklist; the editor permits revisiting that answer later. If no action has been
+taken, recommendations explain practical responses for the specific sources and
+remain recommendations. They do not count as completed measures or reduce a threat.
 
 Where appropriate implementation, coverage and outcome evidence support it, an
 action can be assessed as effective **conditionally on the recorded evidence**.
@@ -141,17 +180,29 @@ addressing one source does not automatically resolve other threats. Material
 source changes invalidate dependent answers or coverage and retain their earlier
 records for reconsideration; stale positive conclusions are not trusted.
 
-The Markdown report has nine sections:
+Where existing protective circumstances already justify an acceptable-level
+assessment, Address records that basis and whether additional action is needed.
+It does not force new safeguards for those sources. A different unresolved or
+unacceptable threat still needs its own response; protection of one source cannot
+clear the whole case.
+
+The Markdown report preserves the complete reasoning chain. Its nine sections
+include explicit **IDENTIFY**, **EVALUATE** and **ADDRESS** labels:
 
 - Scenario summary and reported context.
 - Identified potential Objectivity threats and supporting sources.
 - Threat evaluation and combined influences.
 - Reasonable and informed third party assessment.
-- Actions taken and proposed.
+- Existing and planned actions, recommended responses, and any justified basis
+  for no additional safeguards.
 - Safeguard effectiveness and remaining evidence gaps.
 - Residual threats.
 - Prioritised next steps.
 - Overall conditional ethical conclusion and limitations.
+
+An actions/safeguards section is always present, including when no new safeguards
+are indicated. It explains the existing conditions supporting that result.
+Recommended but unimplemented measures remain distinct from completed actions.
 
 Reports are recomputed from current source records and use professional wording,
 without internal question or fact keys. They summarise reasoning rather than
@@ -194,10 +245,12 @@ app says so and retains the current assessment.
 Each browser save stores the current scenario, actor and source-fact ledger,
 submitted clarification answers, actions and evidence responses, source revisions
 and superseded history, review status and workflow stage. Legacy context, answers
-and supporting-action slots are retained when present. It excludes widget state, evaluations and reports. Restoration
+and supporting-action slots are retained when present. It excludes widget state,
+evaluations and reports. Restoration
 validates the records and recomputes dependency signatures, questions, findings
 and reports. Stale conditional answers are retained in history with a notice;
-an incompatible stage moves back to the necessary clarification. New widget
+an incompatible stage moves back to review. A case whose source account is not
+confirmed returns to the Step 1 summary before evaluation or the report. New widget
 generations prevent old form selections appearing in a restored assessment.
 
 Only **submitted** progress is saved. Use Continue / Save in forms: unsubmitted
@@ -263,8 +316,7 @@ or that every browser or embedding supports the storage component.
 - `objectivity/case_model.py`: provider-neutral actors, source facts, actions,
   revisions, material questions and derived reasoning contracts.
 - `objectivity/understanding.py`: local English understanding provider and source
-  proposal validation. The provider interface permits a future implementation;
-  no model, external API or GenAI integration is present.
+  proposal validation; the application does not require another provider.
 - `objectivity/case_reasoning.py`: source-linked threat instances, material-gap
   selection, significance, combined influences and third party reasoning.
 - `objectivity/case_workflow.py`: source correction, answer invalidation, action
@@ -272,8 +324,14 @@ or that every browser or embedding supports the storage component.
 - `objectivity/case_actions.py`: conditional evidence questions, action
   effectiveness, residual threats and case-specific recommendations.
 - `objectivity/case_report.py`: current-snapshot nine-section Markdown report.
-- `objectivity/case_ui.py`: scenario-driven Identify, Evaluate, Address and report
-  interaction over the shared source model.
+- `objectivity/case_summary.py`: pure, bounded projection of existing case records
+  into six readable summary sections; it does not perform new extraction or
+  ethical reasoning and does not discard the detailed sources.
+- `objectivity/case_ui.py`: concise scenario confirmation, combined guided
+  Identify & Evaluate interaction, conversational Address and the final report
+  over the shared source model.
+- `objectivity/navigation_ui.py`: a local stage-focus helper that keeps new
+  questions visible after navigation without moving ordinary record edits.
 - `objectivity/case_codec.py`, `objectivity/progress.py`: bounded versioned source
   serialization, legacy compatibility and validated restoration.
 - `objectivity/ui.py`, `objectivity/models.py`: application routing and legacy
@@ -292,9 +350,40 @@ or that every browser or embedding supports the storage component.
   external assets or a build step.
 - `tests/test_case_*.py`, `tests/test_understanding.py`: new reasoning, source
   attribution, material questioning, action evidence, report, UI, restoration and
-  migration regressions.
+  migration, confirmation/editing and no-unnecessary-question regressions.
 - Other `tests/test_*.py`: retained Phase 1–3, extraction, progressive context,
   save/resume, JavaScript bridge and UI regressions.
+- `tests/test_property_comparison.py`: representative valuation, career and
+  financing interests, attributed assumptions, scoped family participation and
+  unfamiliar-context regressions.
+
+## Ready for the next provider task
+
+The existing `UnderstandingProvider` protocol and `UnderstandingResult` source
+contract remain available for Task 2. A future provider can propose attributed
+actors, facts and actions through the same validation boundary. The evidence-linked
+case model, material-gap questions, action-effectiveness rules, report generation
+and source-only persistence can be reused without replacing the ethical engine.
+No GenAI transport, external provider, credential configuration or AI request
+controller is implemented in this Task 1 branch.
+
+## Separate Streamlit test application
+
+Create a **new** Streamlit Community Cloud app with these settings:
+
+| Setting | Value |
+| --- | --- |
+| Repository | `jsr200507/objectivity-ethics-agent` |
+| Branch | `dev/workflow-ux-v4` |
+| Main file path | `app.py` |
+| Advanced settings — Python | `3.12` |
+| Secrets | Leave empty |
+| App URL | Choose a new, unused test-app subdomain |
+
+The root `requirements.txt` is installed automatically. No API key, additional
+service or paid subscription is required. Leave existing production and preview
+apps unchanged. These settings describe creating a separate test app; they do not
+mean one has been deployed.
 
 ## Run checks
 
@@ -317,10 +406,13 @@ AppTest alone cannot establish browser persistence.
 Representative cases include the CFO friendship/revenue/contract-renewal case;
 inventory recognition with separate personal bonus and company interests;
 procurement with distinct family and director interests; family employment with
-unknown participation; explicit self-review and advocacy; incomplete information;
+unknown participation; a representative property valuation with separate career
+and company-financing interests and attributed technical assumptions; explicit
+self-review and advocacy; incomplete information;
 revised facts; planned, partial or failed actions; and appropriately evidenced
-conditional protection. Materially different answers must produce different
-qualified findings rather than one generic report.
+conditional protection; no-clarification cases; and justified acceptable-level
+cases needing no additional safeguards. Materially different answers must produce
+different qualified findings rather than one generic report.
 
 ## Functional and professional limitations
 
@@ -339,8 +431,9 @@ qualified findings rather than one generic report.
   jurisdiction and circumstances must inform real decisions. No fabricated
   ACCA/IESBA paragraph references or complete Code-compliance claims are used.
 - Authored rules require maintenance and professional review. Human responsibility
-  for final judgment remains unchanged. The provider-neutral boundary prepares
-  for future work; it does not add generative AI in this phase.
+  for final judgment remains unchanged. User confidence, confirmation or a
+  proposed action cannot establish ethical acceptability, safeguard effectiveness
+  or verified facts.
 - Browser storage is local to one app origin/profile and may be unavailable or
   lost. Keep JSON backups, use anonymised cases and review the privacy limits
   above. There is no account, database or permanent server-side assessment store.

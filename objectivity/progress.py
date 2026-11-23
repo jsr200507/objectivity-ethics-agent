@@ -384,8 +384,10 @@ def _import_progress(data: str | bytes) -> ProgressSnapshot:
         if assessment.case_state is None:
             view = "context" if has_account else "scenario"
             warnings.append("The scenario-driven stage was moved back because no supported case source records were saved.")
-        # Case evaluation/report views can be provisional with material gaps.
-        # Do not restore the former all-questions-before-findings gate here.
+        elif not assessment.case_state.reviewed and view != "identify":
+            view = "identify"
+            warnings.append("Review and confirm the current scenario summary before continuing. Source answers and actions have been retained.")
+        # Confirmation is required; answering every material question is not.
     elif view == "scenario" and has_account:
         view = "identify" if assessment.case_state is not None else "context"
         warnings.append("The saved entry stage was moved to review to preserve the existing assessment.")

@@ -8,7 +8,7 @@ import re
 
 from .case_actions import assess_actions
 from .case_model import CaseFact, CaseState, ReasoningSnapshot
-from .case_reasoning import reason_case
+from .case_reasoning import ACCEPTABLE, reason_case
 
 
 _SOURCE_WORDING = {
@@ -75,6 +75,21 @@ def _fact_status(fact: CaseFact) -> str:
     return _SOURCE_WORDING.get(fact.source, "Recorded account") + review + "; not independently verified"
 
 
+def _structured_detail(fact: CaseFact) -> str:
+    """A bare Yes/No is not intelligible evidence without its meaning."""
+    labels = {
+        'participation': 'Participation in the relevant work',
+        'decision_responsibility': 'Professional involvement',
+        'relationship_active': 'Current personal ties relevant to the decision',
+        'interest_connection': 'Decision outcome affects the reported interest',
+        'commercial_dependence': 'Commercial dependence',
+        'work_changed': 'Professional work already changed in response to influence',
+        'prior_work_affected': 'Earlier professional work affected',
+    }
+    label = labels.get(fact.predicate)
+    return f'{label}: {fact.value}' if label else fact.value
+
+
 def _uncertainty_description(case: CaseState, fact: CaseFact) -> str:
     actor = _label(case, fact.subject)
     labels = {
@@ -105,6 +120,8 @@ def build_case_report(case: CaseState) -> str:
     evaluation_by_id = {evaluation.threat_id: evaluation for evaluation in snapshot.evaluations}
     residual_by_id = {outcome.threat_id: outcome for outcome in addressed.outcomes}
     action_evaluations = {action.action_id: action for action in addressed.actions}
+    acceptable_ids = {outcome.threat_id for outcome in addressed.outcomes if outcome.status == ACCEPTABLE}
+    all_acceptable = bool(snapshot.threats) and len(acceptable_ids) == len(snapshot.threats)
     status = "Conditional assessment" if case.reviewed else "Provisional assessment — account awaiting user review"
     lines = [
         "# Objectivity Ethical Assessment Report", "", "**Objectivity Ethics Assistant**", "",
@@ -137,20 +154,25 @@ def build_case_report(case: CaseState) -> str:
     if claims:
         lines += ["**Claims distinct from established circumstances:**", ""]
         for fact in claims:
-            attribution = _label(case, fact.attribution or fact.subject)
+            speaker = fact.attribution if fact.attribution in {actor.id for actor in case.actors} else fact.subject
+            attribution = _label(case, speaker)
             lines += [_escaped(f"{attribution}: {fact.value}") + " — reported claim, not verified evidence.", ""]
-    lines += ["## B. Identified potential Objectivity threats", ""]
+    lines += ["## B. Identified potential Objectivity threats", "", "**IDENTIFY — Relevant circumstances and supporting evidence**", ""]
     if not snapshot.threats:
         lines += [
             "No potential threat is supported by the currently recognised source information. Missing or unrecognised information may limit that result; it is not assurance that threats are absent.", "",
         ]
     for threat in snapshot.threats:
         lines += ["### " + _escaped(threat_labels[threat.id]), "", _escaped(threat.mechanism), ""]
+        shown_sources = set()
         for fact_id in threat.evidence_ids:
             fact = facts.get(fact_id)
             if fact is None:
                 continue
-            value = (fact.excerpt or fact.value) if fact.source == 'scenario' else fact.value
+            value = (fact.excerpt or _structured_detail(fact)) if fact.source == 'scenario' else _structured_detail(fact)
+            if value in shown_sources:
+                continue
+            shown_sources.add(value)
             subject = _label(case, fact.subject)
             lines += [f"**{_escaped(subject)} — {_escaped(_fact_status(fact))}:**", "", _quote(value), ""]
             if fact.source != 'scenario' and fact.excerpt and fact.excerpt != value:
@@ -159,7 +181,7 @@ def build_case_report(case: CaseState) -> str:
             lines += ["**Remaining uncertainty:**", "", *_paragraphs(threat.uncertainty), ""]
     if snapshot.threats:
         lines += ["These are potential sources of influence, not proof of impaired Objectivity, misconduct or a violation.", ""]
-    lines += ["## C. Threat evaluation", ""]
+    lines += ["## C. Threat evaluation", "", "**EVALUATE — Significance and acceptable-level assessment**", ""]
     for threat in snapshot.threats:
         evaluation = evaluation_by_id.get(threat.id)
         if evaluation is None:
@@ -182,13 +204,23 @@ def build_case_report(case: CaseState) -> str:
             # retain the conditional test without repeating the narrative.
             test = evaluation.third_party.replace(threat.mechanism + ' ', '')
             lines += [f"**{_escaped(threat_labels[threat.id])}:** {_escaped(test)}", ""]
-    if addressed.third_party:
-        lines += ["**After considering recorded actions:** " + _escaped(addressed.third_party), ""]
-    lines += ["## E. Actions taken and proposed", ""]
+    lines += ["The effect of existing conditions and recorded actions is reassessed in the residual findings below.", ""]
+    lines += ["## E. Actions taken and proposed", "", "**ADDRESS — Existing actions, proposed measures and recommended responses**", ""]
+    if acceptable_ids:
+        lines += ["**Existing conditions supporting acceptability:**", ""]
+        for threat in snapshot.threats:
+            if threat.id in acceptable_ids:
+                evaluation = evaluation_by_id[threat.id]
+                protective = next((item for item in reversed(evaluation.reasoning) if 'no additional safeguard is indicated' in item), '')
+                lines += ["**" + _escaped(threat_labels[threat.id]) + ":** " +
+                    _escaped(protective or 'The specific circumstances supporting this acceptable-level finding are recorded in C; no additional safeguard is indicated on that basis.') + "", ""]
     if not case.actions:
-        lines += [
-            "The account does not establish what relevant action has already been taken or proposed. This does not mean that no action was taken.", "",
-        ]
+        if all_acceptable:
+            lines += ["No action has been recorded. This assessment relies on the existing circumstances above; it does not imply that an unrecorded safeguard was implemented.", ""]
+        else:
+            lines += [
+                "The account does not establish what relevant action has already been taken or proposed. This does not mean that no action was taken.", "",
+            ]
     for action in case.actions:
         label = "Implemented (reported)" if action.stage == "Implemented" else action.stage
         linked = [threat_labels[id] for id in action.threat_ids if id in threat_labels]
@@ -201,27 +233,38 @@ def build_case_report(case: CaseState) -> str:
             lines += ["This is a proposal, request or work in progress; completed implementation and effectiveness are not established.", ""]
         if action.stage == "Not Taken":
             lines += ["The user explicitly reports that this relevant action has not been taken.", ""]
+    outstanding = [threat_labels[threat.id] for threat in snapshot.threats if threat.id not in acceptable_ids]
+    if outstanding:
+        lines += [_escaped("Further response remains relevant to: " + "; ".join(outstanding)) +
+            ". The prioritised next steps in H are recommendations, not completed safeguards unless implementation and outcome evidence are recorded above.", ""]
     lines += ["## F. Safeguard effectiveness", ""]
     for action in case.actions:
         evaluation = action_evaluations.get(action.id)
         if evaluation:
             lines += [f"**{_escaped(action.description)} — {_escaped(evaluation.status)}**", "", *_paragraphs(evaluation.reasoning), ""]
+            optional = all_acceptable or bool(action.threat_ids) and all(id in acceptable_ids for id in action.threat_ids)
+            if optional:
+                lines += ["This action is not relied upon for the acceptable-level finding. Its implementation status does not itself establish effectiveness, and additional safeguard evidence is not required for that finding.", ""]
             if action.evidence_detail.strip():
                 lines += ["Reported supporting records:", "", _quote(action.evidence_detail), "",
                     "The records are described by the user; this application has not authenticated them.", ""]
-            if evaluation.gaps:
+            if evaluation.gaps and not optional:
                 lines += ["Evidence or coverage still needed:", "", *_paragraphs(evaluation.gaps), ""]
         else:
             lines += [_escaped(action.description) + ": effectiveness is not established on the current record.", ""]
     if not case.actions:
-        lines += ["No action effectiveness can be established from an unspecified action history.", ""]
+        if all_acceptable:
+            lines += ["No new safeguard's effectiveness is relied upon. The acceptable-level finding rests on the recorded existing conditions, rather than an assumed completed action.", ""]
+        else:
+            lines += ["No action effectiveness can be established from an unspecified action history.", ""]
     lines += ["Implementation alone does not establish effectiveness. Disclosure, escalation and documentation are not automatically sufficient safeguards. Any supported effectiveness remains conditional on the recorded evidence.", "",
         "## G. Residual threats", ""]
     for threat in snapshot.threats:
         residual = residual_by_id.get(threat.id)
         if residual:
             action_reasons = {item for result in action_evaluations.values() for item in result.reasoning}
-            reasons = [item for item in residual.reasoning if item not in action_reasons]
+            initial_reasons = set(evaluation_by_id[threat.id].reasoning) if threat.id in acceptable_ids else set()
+            reasons = [item for item in residual.reasoning if item not in action_reasons | initial_reasons]
             lines += [f"**{_escaped(threat_labels[threat.id])}: {_escaped(residual.status)}**", "", *_paragraphs(reasons), ""]
             if residual.unknowns:
                 lines += ["Unresolved information:", "", *_paragraphs(residual.unknowns), ""]
