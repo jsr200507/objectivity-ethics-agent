@@ -121,8 +121,8 @@ class ScenarioCaseAppTests(unittest.TestCase):
             self.widget("radio", question.prompt).set_value(choice)
         else:
             self.widget("text_input", question.prompt).input(choice)
-        self.widget("text_area", "Additional reported explanation (optional)").input(explanation)
-        self.click("Record answer and reassess")
+        self.widget("text_area", "Additional explanation (optional)").input(explanation)
+        self.click("Record answer and continue")
         self.assertIn(question.id, self.case().answers)
         return question
 
@@ -251,6 +251,21 @@ class ScenarioCaseAppTests(unittest.TestCase):
         self.assertTrue(any(threat.kind in primary for threat in self.reasoning().threats
                             if threat.id in question.threat_ids))
 
+
+    def test_step3_shows_case_specific_safeguards_before_action_history(self):
+        self.begin(BONUS_CASE)
+        self.confirm_account()
+        self.to_actions()
+        text = self.text()
+        self.assertIn('Recommended safeguards', text)
+        self.assertIn('Problem identified', text)
+        self.assertIn('Primary safeguard', text)
+        self.assertIn('Alternative if the primary response is unavailable', text)
+        self.assertIn('Supporting actions and evidence', text)
+        self.assertIn('Existing or planned actions', text)
+        self.assertLess(text.index('Recommended safeguards'), text.index('Existing or planned actions'))
+        self.assertNotIn('What steps, if any, have you already taken', text)
+
     def test_recorded_unknown_participation_does_not_trigger_an_artificial_question(self):
         self.begin(PROPERTY_EMPLOYMENT)
         self.confirm_account()
@@ -259,7 +274,9 @@ class ScenarioCaseAppTests(unittest.TestCase):
         self.assertIn('Familiarity', self.text())
         self.assertIn('Significance remains uncertain', self.text())
         self.to_actions()
-        self.assertIn('What steps, if any, have you already taken to address these concerns?', self.text())
+        self.assertIn('Recommended safeguards', self.text())
+        self.assertIn('Existing or planned actions', self.text())
+        self.assertNotIn('What steps, if any, have you already taken to address these concerns?', self.text())
 
     def test_acceptable_condition_is_retained_without_forced_safeguards_and_in_report(self):
         from objectivity.address import AddressState
