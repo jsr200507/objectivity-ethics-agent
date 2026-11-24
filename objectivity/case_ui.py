@@ -180,7 +180,8 @@ def _material_question(case,snapshot,navigate,plan):
                 st.write(q.impact)
                 explanation = st.text_area('Additional explanation (optional)', max_chars=45_000)
                 submit = st.form_submit_button('Record answer and continue', type='primary')
-                unknown = st.form_submit_button('I do not know') if q.options and 'Unknown' not in q.options or not q.options else False
+                unknown_available = not q.options or 'Unknown' not in q.options
+                unknown = st.form_submit_button('I do not know') if unknown_available else False
             if submit or unknown:
                 try:
                     answer_case_question(case, q.id, 'Unknown' if unknown else choice or '', explanation)
