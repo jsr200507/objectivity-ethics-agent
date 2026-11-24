@@ -312,6 +312,7 @@ class UnderstandingTests(unittest.TestCase):
         claims = self.facts(result, 'claim')
         self.assertTrue(any(f.subject == 'valuation_firm' and '£12 million' in f.value for f in claims))
         self.assertTrue(any(f.subject == 'user' and 'rental growth assumptions' in f.value for f in claims))
+        self.assertTrue(any(f.subject == 'user' and 'sufficient supporting evidence' in f.value for f in claims))
 
 
 if __name__=='__main__':unittest.main()
