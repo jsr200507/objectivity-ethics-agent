@@ -93,6 +93,17 @@ class ResidualFinding:
     third_party: str
 
 @dataclass(frozen=True)
+class SafeguardRecommendation:
+    threat_id: str
+    target: str
+    remit: str
+    primary: str
+    context: str
+    alternative: str
+    supporting: str
+
+
+@dataclass(frozen=True)
 class ActionAssessment:
     outcomes: tuple[ResidualFinding, ...]
     actions: tuple[ActionEvaluation, ...]
@@ -100,6 +111,7 @@ class ActionAssessment:
     third_party: str
     next_steps: tuple[str, ...]
     unknowns: tuple[str, ...]
+    recommendations: tuple[SafeguardRecommendation, ...] = ()
 
 
 def _unique(values):
@@ -314,7 +326,7 @@ def action_questions(case: CaseState, snapshot: ReasoningSnapshot | None = None)
     return tuple(result)
 
 
-def _recommendation(case, threat, actions):
+def _recommendation_details(case, threat, actions):
     """Propose bounded, contextual options without recording or clearing actions."""
     from .case_reasoning import _is_no, _is_yes, _lookup, _unknown
     from .understanding import _authority_kind
@@ -415,15 +427,30 @@ def _recommendation(case, threat, actions):
             focus = f"Establish completion and outcome of {planned.description}, with records of which source was controlled and when. " + focus
     elif any(action.failed for action in actions):
         focus = "Resolve the recorded unsuccessful or inadequate response with a different measure and explicit coverage and outcome evidence before relying on the judgment. " + focus
-    context = f" Context: {focus.strip()}" if focus.strip() else ""
-    return f"For {target}. {remit}Primary: {primary}{context} Alternative: {alternative} Supporting: {supporting}"
+    return SafeguardRecommendation(
+        threat.id, target, remit.strip(), primary, focus.strip(), alternative, supporting,
+    )
+
+
+def _format_recommendation(recommendation: SafeguardRecommendation) -> str:
+    context = f" Context: {recommendation.context}" if recommendation.context else ""
+    remit = f"{recommendation.remit} " if recommendation.remit else ""
+    return (
+        f"For {recommendation.target}. {remit}Primary: {recommendation.primary}{context} "
+        f"Alternative: {recommendation.alternative} Supporting: {recommendation.supporting}"
+    )
+
+
+def _recommendation(case, threat, actions):
+    """Compatibility text projection for reports and existing callers."""
+    return _format_recommendation(_recommendation_details(case, threat, actions))
 
 
 def assess_actions(case: CaseState, snapshot: ReasoningSnapshot | None = None) -> ActionAssessment:
     """Recompute action effectiveness and residuals without trusting assertions."""
     snapshot = _reason(case, snapshot)
     action_results = tuple(_action_evaluation(case, action, snapshot) for action in case.actions)
-    outcomes, steps, all_gaps = [], [], []
+    outcomes, steps, all_gaps, recommendations = [], [], [], []
     evaluations = {evaluation.threat_id: evaluation for evaluation in snapshot.evaluations}
     needs_action_history = any(not _acceptable_conditions(case, evaluations.get(threat.id)) for threat in snapshot.threats)
     if not case.actions_reviewed and needs_action_history:
@@ -477,7 +504,9 @@ def assess_actions(case: CaseState, snapshot: ReasoningSnapshot | None = None) -
             if failed:
                 reasons.append("A reported unsuccessful measure or continuing influence is not overridden by another positive assertion.")
             third_party = f"A reasonable and informed third party would still need the missing implementation, coverage or outcome evidence for {_target(case, threat)} before concluding that Objectivity is appropriately protected."
-            steps.append(_recommendation(case, threat, linked))
+            recommendation = _recommendation_details(case, threat, linked)
+            recommendations.append(recommendation)
+            steps.append(_format_recommendation(recommendation))
         outcomes.append(ResidualFinding(threat.id, threat.kind, status, _unique(reasons), _unique(gaps), tuple(action.action_id for action in linked), third_party))
         all_gaps.extend(gaps)
     if not snapshot.threats:
@@ -495,4 +524,4 @@ def assess_actions(case: CaseState, snapshot: ReasoningSnapshot | None = None) -
     else:
         conclusion = "The available evidence does not yet establish that all identified Objectivity threats are at an acceptable level. Resolve the remaining material uncertainties and incomplete responses before relying on a positive conclusion."
     third_party = " ".join(outcome.third_party for outcome in outcomes) if outcomes else "There is not enough case-specific evidence for this application to provide assurance of Objectivity through the reasonable and informed third party test."
-    return ActionAssessment(tuple(outcomes), action_results, conclusion, third_party, _unique(steps), _unique(all_gaps))
+    return ActionAssessment(tuple(outcomes), action_results, conclusion, third_party, _unique(steps), _unique(all_gaps), tuple(recommendations))
