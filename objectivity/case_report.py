@@ -281,7 +281,28 @@ def build_case_report(case: CaseState) -> str:
     lines += ["## H. Prioritised next steps", ""]
     steps = tuple(dict.fromkeys(step for step in addressed.next_steps if step))
     if steps:
-        lines += [f"{number}. {_escaped(step)}" for number, step in enumerate(steps, 1)] + [""]
+        for number, step in enumerate(steps, 1):
+            if "Primary: " not in step or "Alternative: " not in step or "Supporting: " not in step:
+                lines += [f"{number}. {_escaped(step)}", ""]
+                continue
+            prefix, remainder = step.split("Primary: ", 1)
+            if " Context: " in remainder:
+                primary, remainder = remainder.split(" Context: ", 1)
+                context, remainder = remainder.split(" Alternative: ", 1)
+            else:
+                primary, remainder = remainder.split(" Alternative: ", 1)
+                context = ""
+            alternative, supporting = remainder.split(" Supporting: ", 1)
+            target_and_role = prefix.removeprefix("For ").strip()
+            target, separator, role_context = target_and_role.partition(". ")
+            lines += [f"### {number}. {_escaped(target.rstrip('.'))}", ""]
+            if separator and role_context.strip():
+                lines += [f"**Role and authority context:** {_escaped(role_context.strip())}", ""]
+            lines += [f"**Primary:** {_escaped(primary.strip())}", ""]
+            if context.strip():
+                lines += [f"**Case-specific context:** {_escaped(context.strip())}", ""]
+            lines += [f"**Alternative:** {_escaped(alternative.strip())}", "",
+                      f"**Supporting evidence:** {_escaped(supporting.strip())}", ""]
     else:
         lines += ["Maintain the recorded protections, reconsider the assessment when material circumstances change, and resolve any limitations before relying on a professional conclusion.", ""]
     lines += ["## I. Overall ethical conclusion and limitations", "", _escaped(addressed.conclusion), ""]
