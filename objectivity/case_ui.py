@@ -180,8 +180,7 @@ def _material_question(case,snapshot,navigate,plan):
                 st.write(q.impact)
                 explanation = st.text_area('Additional explanation (optional)', max_chars=45_000)
                 submit = st.form_submit_button('Record answer and continue', type='primary')
-                unknown_available = not q.options or 'Unknown' not in q.options
-                unknown = st.form_submit_button('I do not know') if unknown_available else False
+                unknown = st.form_submit_button('I do not know') if not q.options else False
             if submit or unknown:
                 try:
                     answer_case_question(case, q.id, 'Unknown' if unknown else choice or '', explanation)
@@ -396,8 +395,7 @@ def _address(case,snapshot,navigate):
                 choice = st.text_area(q.prompt, max_chars=100_000)
             st.caption('Why this evidence matters: ' + q.why)
             submit = st.form_submit_button('Record action evidence', type='primary')
-            unknown_available = not q.options or 'Unknown' not in q.options
-            unknown = st.form_submit_button('Unknown') if unknown_available else False
+            unknown = st.form_submit_button('Unknown') if not q.options else False
         if submit or unknown:
             try:
                 answer_action_question(case, q.id, 'Unknown' if unknown else choice or '')
