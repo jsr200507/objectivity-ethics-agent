@@ -415,7 +415,8 @@ def _recommendation(case, threat, actions):
             focus = f"Establish completion and outcome of {planned.description}, with records of which source was controlled and when. " + focus
     elif any(action.failed for action in actions):
         focus = "Resolve the recorded unsuccessful or inadequate response with a different measure and explicit coverage and outcome evidence before relying on the judgment. " + focus
-    return f"For {target}. {remit}Primary: {primary} {focus}Alternative: {alternative} Supporting: {supporting}"
+    context = f" Context: {focus.strip()}" if focus.strip() else ""
+    return f"For {target}. {remit}Primary: {primary}{context} Alternative: {alternative} Supporting: {supporting}"
 
 
 def assess_actions(case: CaseState, snapshot: ReasoningSnapshot | None = None) -> ActionAssessment:
