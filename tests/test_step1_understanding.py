@@ -347,5 +347,83 @@ class CompoundTitleRegressionTests(unittest.TestCase):
                 self.assertFalse(facts(start_case(source), 'decision_responsibility'))
 
 
+class MergeIntegrationRegressionTests(unittest.TestCase):
+    def test_full_context_affirmative_financing_link_before_the_financing_noun_is_reused(self):
+        case = start_case("I review a property valuation. This valuation is linked to the company's financing.")
+        connection, = facts(case, 'interest_connection')
+        self.assertEqual((connection.value, connection.status, connection.reviewed), ('Yes', 'reported', False))
+        self.assertNotIn('interest_connection', {q.predicate for q in reason_case(case).questions})
+
+    def test_contextual_direct_financing_negation_is_not_affirmed(self):
+        case = start_case("I review a property valuation. This valuation is not linked to the company's financing.")
+        connection, = facts(case, 'interest_connection')
+        self.assertEqual((connection.value, connection.status, connection.reviewed), ('No', 'reported', False))
+
+    def test_contextual_third_party_denial_keeps_its_question_and_qualified_evaluation(self):
+        case = start_case("I review a property valuation. The investment director denies that this valuation is linked to the company's financing.")
+        self.assertFalse(facts(case, 'interest_connection'))
+        self.assertIn('denies that', facts(case, 'interest')[0].excerpt)
+        review_case(case)
+        snapshot = reason_case(case)
+        self.assertIn('interest_connection', {q.predicate for q in snapshot.questions})
+        self.assertEqual({e.outcome for e in snapshot.evaluations}, {'Acceptability not established'})
+
+    def test_contextual_quoted_denial_cannot_be_reaffirmed_by_the_fallback(self):
+        case = start_case('I review a property valuation. The investment director says, "This valuation is not linked to the company\'s financing."')
+        self.assertFalse(facts(case, 'interest_connection'))
+        self.assertIn('interest_connection', {q.predicate for q in reason_case(case).questions})
+        self.assertTrue(all(f.status == 'reported' and not f.reviewed for f in case.facts))
+
+    def test_conditional_financing_effect_keeps_its_literal_qualification(self):
+        source = "I review a property valuation. A lower valuation could affect the company's loan covenant."
+        case = start_case(source)
+        connection, = facts(case, 'interest_connection')
+        self.assertEqual((connection.value, connection.status, connection.reviewed), ('Yes', 'reported', False))
+        self.assertIn('could affect', connection.excerpt)
+        self.assertIn(connection.excerpt, source)
+        self.assertFalse(facts(case, 'work_changed'))
+        self.assertFalse(facts(case, 'prior_work_affected'))
+
+    def test_compound_and_structured_roles_keep_new_explicit_responsibilities(self):
+        for activity in ('reviewing', 'overseeing', 'checking', 'examining', 'auditing'):
+            for source in (
+                f'You are a risk and compliance analyst responsible for {activity} a property valuation.',
+                f'Role: Risk and compliance analyst\nDecision: {activity.capitalize()} a property valuation.',
+            ):
+                with self.subTest(source=source):
+                    case = start_case(source)
+                    self.assertEqual([f.value.casefold() for f in facts(case, 'role')], ['risk and compliance analyst'])
+                    self.assertEqual([f.value for f in facts(case, 'decision_responsibility')], ['I supervise or review the work'])
+
+    def test_explicit_work_without_compound_titles_uses_the_unified_helper(self):
+        for activity in ('reviewing', 'overseeing', 'checking', 'examining', 'auditing', 'assessing', 'preparing'):
+            expected = 'I prepare or assess the work' if activity in {'assessing', 'preparing'} else 'I supervise or review the work'
+            source = f'I am a financial accountant. I am responsible for {activity} a property valuation.'
+            with self.subTest(activity=activity):
+                self.assertEqual([f.value for f in facts(start_case(source), 'decision_responsibility')], [expected])
+
+    def test_job_titles_still_do_not_establish_work_or_final_authority(self):
+        for source in ('I am a financial accountant.', 'You are a risk and compliance analyst.'):
+            with self.subTest(source=source):
+                case = start_case(source + ' My annual bonus depends on the valuation.')
+                self.assertFalse(facts(case, 'decision_responsibility'))
+                self.assertIn('decision_responsibility', {q.predicate for q in reason_case(case).questions})
+
+    def test_review_responsibility_does_not_take_the_directors_approval_authority(self):
+        case = start_case('I am responsible for checking a property valuation; the director approves the final valuation.')
+        self.assertEqual([f.value for f in facts(case, 'decision_responsibility')], ['I supervise or review the work'])
+
+    def test_other_peoples_work_negation_and_quoted_first_person_remain_separate(self):
+        for activity in ('checking', 'overseeing', 'examining', 'auditing'):
+            for source in (
+                f'The director is responsible for {activity} the valuation.',
+                f'The director says, "I am responsible for {activity} the valuation."',
+                f'I am not responsible for {activity} the valuation.',
+                f'I might be responsible for {activity} the valuation.',
+            ):
+                with self.subTest(source=source):
+                    self.assertFalse(facts(start_case(source), 'decision_responsibility'))
+
+
 if __name__ == '__main__':
     unittest.main()

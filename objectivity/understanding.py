@@ -26,6 +26,7 @@ _GENERIC_ORG = re.compile(r"\b(?:external\s+valuation\s+firm|independent\s+valua
 _EMPLOYMENT = re.compile(rf"(?i:\b(?:my|your|our)\s+(?P<relation>{_FAMILY})\b[^.!?;]{{0,55}}\b(?:works?\s+(?:for|at|in)|is\s+employed\s+by|is\s+employed\s+at|is\s+an?\s+employee\s+of)\s+)(?P<org>{_NAME}|(?i:(?:an?\s+|the\s+)?(?:external\s+|independent\s+)?valuation\s+firm))\b")
 _BENEFITS = re.compile(r"\b(?:bonus(?:es)?|commissions?|consulting\s+fee|advisory\s+fee|contingent\s+fee|success\s+fee|retainer|shareholdings?|shares?|equity|stock\s+options?|financial\s+(?:benefit|incentive)|cash\s+reward|pay\s+rise|salary\s+increase)\b", re.I)
 _LINK = re.compile(r"\b(?:depend(?:s|ent)?|tied|linked|conditional|contingent|in\s+return|provided\s+that|only\s+if|on\s+each\s+(?:sale|approval)|based\s+on)\b", re.I)
+_FINANCING_EFFECT = re.compile(r'\baffect(?:s|ed|ing)?\b', re.I)
 _FIRM_INCENTIVE = re.compile(r"\b(?:contract\s+renewal|client\s+retention|retain\s+(?:the\s+)?client|profit\s+targets?|firm[’']?s?\s+fees?|firm\b[^.!?;]{0,45}\b(?:earns?|receives?)\s+(?:a\s+)?(?:fee|income|retainer))\b", re.I)
 _CAREER = re.compile(r'\b(?:promotion|career\s+advancement|job\s+security|continued\s+employment)\b', re.I)
 _ORG_FINANCE = re.compile(r'\b(?:refinancing|financing|borrowing|(?:loan|debt|lending)\s+covenants?|credit\s+(?:facility|line)|funding\s+(?:renewal|agreement|conditions)|capital\s+raise)\b', re.I)
@@ -34,7 +35,7 @@ _HISTORICAL = re.compile(r"^\s*(?:previously|historically|last\s+year|in\s+an?\s
 _CONTEXT_FIELD = re.compile(r'^\s*(?:[-*]\s+)?(?:your\s+)?(?:professional\s+)?(?P<field>role|decision|activity)\s*:\s*(?P<value>.+)$', re.I)
 _WORK = (
     ('I make or recommend the decision', r'(?:mak(?:e|ing)|recommend(?:ing)?|approv(?:e|ing)|select(?:ing)?|decid(?:e|ing))'),
-    ('I supervise or review the work', r'(?:review(?:ing)?|supervis(?:e|ing))'),
+    ('I supervise or review the work', r'(?:review(?:ing)?|supervis(?:e|ing)|oversee(?:ing)?|check(?:ing)?|examin(?:e|ing)|audit(?:ing)?)'),
     ('I prepare or assess the work', r'(?:prepar(?:e|ing)|assess(?:ing)?|evaluat(?:e|ing)|compar(?:e|ing))'),
 )
 _COMPOUND_SELF_ROLE = re.compile(
@@ -152,9 +153,6 @@ def _financing_connection(unit, finance, decision):
     clause = next((part for part in _scoped_clauses(unit)
                    if unit.find(part) <= finance.start() < unit.find(part) + len(part)), unit)
     start = finance.start() - unit.find(clause)
-    existing = _connection_value(clause[start:])
-    if existing:
-        return existing
     auxiliary = (
         r'(?:(?:could|can|may|might|will|would|does?|did)\s+)?'
         r"(?:(?:not|never|cannot|can['’]t|couldn['’]t|wouldn['’]t|doesn['’]t|didn['’]t)\s+)?"
@@ -171,6 +169,14 @@ def _financing_connection(unit, finance, decision):
     )
     relation = forward or backward
     if not relation or not _decision_reference(relation['cause'], decision):
+        existing = _connection_value(clause[start:])
+        if existing:
+            return existing
+        # PR #8's wider context helps when a dependency precedes the financing
+        # noun. Keep this behind attribution/denial checks and the explicit
+        # local effect parser, and require a reference to the current work.
+        if _decision_reference(unit, decision):
+            return _connection_value(unit, financing=True)
         return None
     if re.search(r"\b(?:unclear|unknown|uncertain|unsure|whether|do\s+not\s+know|don['’]t\s+know)\b", clause, re.I) or re.search(r'\b(?:may|might)\s+not\b', relation['link'], re.I):
         return 'Unknown'
@@ -222,11 +228,11 @@ def _financial_type(fragment):
     return 'Reported financial incentive'
 
 
-def _connection_value(clause):
+def _connection_value(clause, *, financing=False):
     """Reuse only an explicit outcome link, retaining its stated uncertainty."""
     if re.search(r'\b(?:unrelated|unaffected)\b|\bnot\s+(?:depend(?:s|ent)?|linked|tied|conditional)\b', clause, re.I):
         return 'No'
-    if not _LINK.search(clause) and not re.search(r'\b(?:if|unless)\b[^.!?;]{0,75}\b(?:accept|approve|recommend|favour|favor|sign|select)\w*\b', clause, re.I):
+    if not _LINK.search(clause) and not (financing and _FINANCING_EFFECT.search(clause)) and not re.search(r'\b(?:if|unless)\b[^.!?;]{0,75}\b(?:accept|approve|recommend|favour|favor|sign|select)\w*\b', clause, re.I):
         return None
     if re.search(r'\b(?:may|might|could|unclear|unknown|uncertain|unsure|do\s+not\s+know|don[’\']t\s+know)\b[^.!?;]{0,55}\b(?:depend|link|tie|affect|conditional)', clause, re.I):
         return 'Unknown'
@@ -499,12 +505,15 @@ class LocalUnderstandingProvider:
                 fact(speaker,'pressure',unit.rstrip('.!?'),unit,'user',attribution=actors[speaker].label)
             # A statement about a future valuation is a reported claim, never a prediction/fact of recovery.
             future_claim = re.search(r'\b(?:says?|said|claims?|claimed|believes?)\b',unit,re.I) and re.search(r'\b(?:may|might|could|will)\b[^.!?;]{0,65}\b(?:recover|improve|rise|increase)\b',unit,re.I)
-            technical_verb = re.search(r'\b(?:says?|said|claims?|claimed|states?|stated|explains?|explained|maintains?|maintained|assumes?|assumed|forecasts?|projects?|believes?)\b',unit,re.I)
+            technical_verb = re.search(r'\b(?:says?|said|claims?|claimed|states?|stated|explains?|explained|maintains?|maintained|assumes?|assumed|forecasts?|projects?|believes?|estim\w*|notic\w*|observ\w*|identif\w*|found)\b',unit,re.I)
             technical_claim = technical_verb and not _negated(unit, technical_verb.start()) and re.search(r'\b(?:assumptions?|growth|discount\s+rate|yield|forecast|returns?|value|estimate|recovery)\b',unit,re.I)
             if future_claim or technical_claim:
                 named = [key for _,key in mentions(unit)]
-                speaker=personal_mentions[0] if personal_mentions else named[0] if named else 'user' if re.match(r'\s*(?:I|you|we)\b', unit, re.I) else actor('Reported claimant',kind='unknown')
+                speaker=personal_mentions[0] if personal_mentions else named[0] if named else 'user' if re.search(r'\b(?:I|you|we)\s+(?:have\s+)?(?:estimated|noticed|observed|identified|found|assumed|forecast|projected|believe|consider)\b', unit, re.I) or re.match(r'\s*(?:I|you|we)\b', unit, re.I) else actor('Reported claimant',kind='unknown')
                 fact(speaker,'claim',unit.rstrip('.!?'),unit,attribution=speaker)
+            evidence_gap = re.search(r'\b(?:not\s+yet|have\s+not|haven[’\']t|insufficient|lack\s+of|no)\b[^.!?;]{0,100}\b(?:supporting\s+evidence|evidence|documentation|records|support)\b', unit, re.I)
+            if evidence_gap and re.search(r'\b(?:I|you|we)\b', unit, re.I):
+                fact('user','claim',unit.rstrip('.!?'),unit,attribution='You')
             # Self-review and advocacy require their own supported mechanisms, not an audit-role keyword.
             selfreview=re.search(r'\b(?:review(?:ing)?|audit(?:ing)?|assess(?:ing)?)\b[^.!?;]{0,75}\b(?:my\s+own|our\s+own|your\s+own|I\s+(?:previously\s+)?prepared|you\s+(?:previously\s+)?prepared)\b|\b(?:I|you)\s+(?:prepared|developed|calculated)\b[^.!?]{0,120}\b(?:now|then)\b[^.!?]{0,55}\b(?:review|audit|assess)\s+(?:it|the\s+same|that|this)\b',unit,re.I)
             if selfreview and not _negated(unit,selfreview.start()):fact('user','self_review','Reviewing or relying on own earlier work',unit)

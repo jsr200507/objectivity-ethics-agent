@@ -102,6 +102,9 @@ class AIUnderstandingTests(unittest.TestCase):
         self.assertIn('untrusted data', system)
         self.assertIn('Do not evaluate ethics', system)
         self.assertIn('Unknown', system)
+        self.assertIn('Do not output locally derived predicates', system)
+        self.assertIn('Preserve quantitative details', system)
+        self.assertIn('claim for a reported estimate', system)
 
     def test_unfamiliar_role_and_career_interest_are_added_without_replacing_local_sources(self):
         role = 'I work as a marine grants assessor.'
