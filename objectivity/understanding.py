@@ -22,7 +22,7 @@ _RECIPIENT_GROUP = re.compile(r'\b(?:audit\s+committee|ethics\s+committee|board\
 _RELATIVE = re.compile(rf"\b(?:my|your|our)\s+(?P<relation>{_FAMILY})\b", re.I)
 _NAME = r"[A-Z][A-Za-z0-9&’'-]*(?:\s+[A-Z][A-Za-z0-9&’'-]*){0,4}"
 _ORG = re.compile(rf"\b{_NAME}\s+(?:Valuations?|Valuers?|Surveyors?|Advisory|Supplies|Engineering|Components|Bank|Ltd|Limited|PLC|Inc|Foundation|Charity|Mutual|Tools)\b")
-_GENERIC_ORG = re.compile(r"\b(?:external\s+valuation\s+firm|independent\s+valuation\s+firm|valuation\s+firm|manufacturing\s+company|listed\s+client|our\s+firm|your\s+firm|my\s+firm|the\s+firm|our\s+company|your\s+company|my\s+company|the\s+company)\b", re.I)
+_GENERIC_ORG = re.compile(r"\b(?:external\s+valuation\s+firm|independent\s+valuation\s+firm|valuation\s+firm|manufacturing\s+company|listed\s+client|(?:our|your|my|the)\s+(?:firm|company|organisation|organization))\b", re.I)
 _EMPLOYMENT = re.compile(rf"(?i:\b(?:my|your|our)\s+(?P<relation>{_FAMILY})\b[^.!?;]{{0,55}}\b(?:works?\s+(?:for|at|in)|is\s+employed\s+by|is\s+employed\s+at|is\s+an?\s+employee\s+of)\s+)(?P<org>{_NAME}|(?i:(?:an?\s+|the\s+)?(?:external\s+|independent\s+)?valuation\s+firm))\b")
 _BENEFITS = re.compile(r"\b(?:bonus(?:es)?|commissions?|consulting\s+fee|advisory\s+fee|contingent\s+fee|success\s+fee|retainer|shareholdings?|shares?|equity|stock\s+options?|financial\s+(?:benefit|incentive)|cash\s+reward|pay\s+rise|salary\s+increase)\b", re.I)
 _LINK = re.compile(r"\b(?:depend(?:s|ent)?|tied|linked|conditional|contingent|in\s+return|provided\s+that|only\s+if|on\s+each\s+(?:sale|approval)|based\s+on)\b", re.I)
@@ -31,6 +31,150 @@ _CAREER = re.compile(r'\b(?:promotion|career\s+advancement|job\s+security|contin
 _ORG_FINANCE = re.compile(r'\b(?:refinancing|financing|borrowing|(?:loan|debt|lending)\s+covenants?|credit\s+(?:facility|line)|funding\s+(?:renewal|agreement|conditions)|capital\s+raise)\b', re.I)
 _HYPOTHETICAL = re.compile(r"^\s*(?:suppose|supposing|imagine|hypothetically|perhaps|maybe)\b", re.I)
 _HISTORICAL = re.compile(r"^\s*(?:previously|historically|last\s+year|in\s+an?\s+(?:old|unrelated)\s+case)\b", re.I)
+_CONTEXT_FIELD = re.compile(r'^\s*(?:[-*]\s+)?(?:your\s+)?(?:professional\s+)?(?P<field>role|decision|activity)\s*:\s*(?P<value>.+)$', re.I)
+_WORK = (
+    ('I make or recommend the decision', r'(?:mak(?:e|ing)|recommend(?:ing)?|approv(?:e|ing)|select(?:ing)?|decid(?:e|ing))'),
+    ('I supervise or review the work', r'(?:review(?:ing)?|supervis(?:e|ing))'),
+    ('I prepare or assess the work', r'(?:prepar(?:e|ing)|assess(?:ing)?|evaluat(?:e|ing)|compar(?:e|ing))'),
+)
+_COMPOUND_SELF_ROLE = re.compile(
+    r"^\s*(?:I\s+(?:(?:now|currently)\s+)?(?:am|work\s+as|serve\s+as)|I['’]m|"
+    r"you\s+(?:(?:now|currently)\s+)?(?:are|work\s+as|serve\s+as)|you['’]re)\s+"
+    r'(?:(?:now|currently)\s+)?(?:(?:a|an|the)\s+)?'
+    r'(?P<role>(?:[a-z][a-z-]*\s+){1,3}?and\s+(?:[a-z][a-z-]*\s+){1,3}?'
+    r'(?:analyst|accountant|manager|director|officer|coordinator|associate|specialist|consultant|controller))\b',
+    re.I,
+)
+
+
+def _compound_role(unit):
+    """A bounded, explicit self-description, not another party's title."""
+    match = _COMPOUND_SELF_ROLE.match(unit)
+    if not match or re.search(
+        r'\b(?:not|never|no|without|may|might|could|would|whether|if|who|that|or|to|asked|told|'
+        r'considering|interested|reviewing|assessing|preparing|I|you|we|he|she|they|is|are|am)\b',
+        match['role'], re.I,
+    ):
+        return None
+    return match['role'][:1].upper() + match['role'][1:], match.group()
+
+
+def _context_field(unit):
+    """Recognise self-described field labels, retaining their literal source."""
+    match = _CONTEXT_FIELD.fullmatch(unit)
+    if not match:
+        return None
+    name = 'role' if match['field'].lower() == 'role' else 'decision'
+    value = match['value'].strip().rstrip('.!?').strip()
+    if re.fullmatch(r'unknown|unclear|not\s+(?:known|specified)|not\s+applicable|n/a', value, re.I):
+        return name, 'Unknown', 'unknown'
+    return (name, value, 'reported') if value else None
+
+
+def _professional_responsibility(unit, role):
+    """Reuse attributed current work, not titles, requests or quoted speakers."""
+    field = _context_field(unit)
+    if field and field[0] == 'role':
+        return None
+    title = re.escape(role) if role != 'Unknown' else ROLE_PATTERN
+    # The finite title catalogue must not prevent reuse of clearly stated work
+    # in "I am a [different profession] reviewing ...". Guard this bounded noun
+    # phrase against negation, relative clauses and proposed/uncertain activity.
+    title_prefix = rf'(?:(?:(?:a|an|the)\s+)?{title}|(?:a|an|the)\s+[a-z][a-z -]{{1,85}}?)\s+'
+    self_cue = (
+        r'\b(?:I|you|we)\s+(?:(?:now|currently|also|independently)\s+)?'
+        rf'(?:(?:am|are)\s+(?:(?:now|currently)\s+)?(?P<title>{title_prefix})?'
+        r'(?:(?:responsible\s+for|tasked\s+with)\s+)?|'
+        r'(?:must|need\s+to|have\s+to)\s+)?'
+        r'(?:(?:now|currently|also|independently)\s+)?'
+    )
+    clauses = _scoped_clauses(field[1] if field and field[2] == 'reported' else unit)
+    for value, verb in _WORK:
+        for clause in clauses:
+            if _hypothetical(clause):
+                continue
+            # A labelled activity has an explicit user scope even without I/you.
+            if field and field[2] == 'reported' and re.match(rf'^(?:to\s+)?{verb}\b', clause, re.I):
+                return value
+            for match in re.finditer(self_cue + rf'(?P<work>{verb})\b', clause, re.I):
+                prefix = clause[:match.start()]
+                if re.search(r'\b(?:said|says?|told|claims?|claimed|wrote|asked|stated|explained)\b', prefix, re.I):
+                    continue
+                scope = match['title'] or ''
+                if role != 'Unknown' and re.fullmatch(rf'(?:(?:a|an|the)\s+)?{re.escape(role)}\s*', scope, re.I):
+                    # These can be nouns/conjunctions inside the recorded title,
+                    # rather than a new clause or an intention to perform work.
+                    scope = re.sub(r'\b(?:and|planning)\b', '', scope, flags=re.I)
+                if re.search(r'\b(?:not|never|no|without|may|might|could|would|perhaps|maybe|whether|if|who|that|and|or|to|asked|told|planning|considering|interested)\b', scope, re.I):
+                    continue
+                return value
+    return None
+
+
+def _decision_reference(text, decision):
+    """Require an explicit decision reference or a shared substantive topic."""
+    if not decision:
+        return False
+    if re.search(r'\b(?:this|that|the|my|your|our)\s+(?:decision|recommendation|judg(?:e)?ment|outcome)\b', text, re.I):
+        return True
+    generic = set('this that with from into before after year financial statements company organisation organization external independent current professional decision activity reviewing review assessing assess preparing prepare evaluating evaluate comparing compare recommending recommend approving approve selecting select supervising supervise finalised finalized'.split())
+    topics = set(re.findall(r'\b[a-z]{4,}\b', decision.casefold())) - generic
+    return bool(topics & set(re.findall(r'\b[a-z]{4,}\b', text.casefold())))
+
+
+def _reported_financing_denial(unit, finance):
+    """Reported rejection of a link is neither its affirmation nor verification."""
+    parts = re.split(r';|\b(?:but|whereas|however)\b|\band\s+(?=(?:says?|said|states?|confirms?)\b)', unit, flags=re.I)
+    clause = next((part for part in parts
+                   if unit.find(part) <= finance.start() < unit.find(part) + len(part)), unit)
+    report = re.search(r'\b(?:denies|denied|deny|says?|said|states?|stated|claims?|claimed|explains?|explained)\b', clause, re.I)
+    if not report:
+        return False
+    proposition = clause[report.end():]
+    if report.group().casefold() in {'denies', 'denied', 'deny'}:
+        return bool(_LINK.search(proposition) or re.search(r'\b(?:affect|impact|jeopardi[sz]|breach)\w*\b', proposition, re.I))
+    return bool(re.search(
+        r"\b(?:not|never|cannot|can['’]t|couldn['’]t|wouldn['’]t|doesn['’]t)\s+"
+        r'(?:be\s+)?(?:adversely\s+)?(?:affect(?:ed)?|impact(?:ed)?|jeopardi[sz]ed?|breach|depend(?:s|ent)?|linked|tied|conditional)\b|'
+        r'\b(?:unrelated|unaffected)\b', proposition, re.I,
+    ))
+
+
+def _financing_connection(unit, finance, decision):
+    """A stated possible effect answers 'could affect', not 'has happened'.
+
+    Keep existing explicit dependency/uncertainty handling, but also read the
+    causal words before the financing noun. Mere topic co-occurrence is not a
+    link, and explicit doubt about the connection still remains Unknown.
+    """
+    if _reported_financing_denial(unit, finance):
+        return None  # Keep the scoped clarification; Unknown would close it.
+    clause = next((part for part in _scoped_clauses(unit)
+                   if unit.find(part) <= finance.start() < unit.find(part) + len(part)), unit)
+    start = finance.start() - unit.find(clause)
+    existing = _connection_value(clause[start:])
+    if existing:
+        return existing
+    auxiliary = (
+        r'(?:(?:could|can|may|might|will|would|does?|did)\s+)?'
+        r"(?:(?:not|never|cannot|can['’]t|couldn['’]t|wouldn['’]t|doesn['’]t|didn['’]t)\s+)?"
+    )
+    forward = re.search(
+        rf'(?P<cause>.*?)\b(?P<link>{auxiliary}'
+        r'(?:affects?|impacts?|jeopardi[sz]es?|breach(?:es)?)\b[^.!?;]{0,80})$',
+        clause[:start], re.I,
+    )
+    backward = re.match(
+        rf'\s+(?P<link>{auxiliary}be\s+'
+        r'(?:adversely\s+)?(?:affected|impacted|jeopardi[sz]ed)\s+by)\s+(?P<cause>[^.!?;]+)',
+        clause[start + len(finance.group()):], re.I,
+    )
+    relation = forward or backward
+    if not relation or not _decision_reference(relation['cause'], decision):
+        return None
+    if re.search(r"\b(?:unclear|unknown|uncertain|unsure|whether|do\s+not\s+know|don['’]t\s+know)\b", clause, re.I) or re.search(r'\b(?:may|might)\s+not\b', relation['link'], re.I):
+        return 'Unknown'
+    return 'No' if re.search(r"\b(?:not|never|cannot|can['’]t|couldn['’]t|wouldn['’]t|doesn['’]t|didn['’]t)\b", relation['link'], re.I) else 'Yes'
 
 
 def _id(prefix, *parts):
@@ -38,7 +182,8 @@ def _id(prefix, *parts):
 
 
 def _units(text):
-    return [m.group().strip() for m in re.finditer(r"(?:\.(?=\d)|[^.!?\n])+(?:[.!?]|$)", text) if m.group().strip()]
+    # A structured field is also a source unit when its line has no full stop.
+    return [m.group().strip() for m in re.finditer(r"(?:\.(?=\d)|[^.!?\n])+(?:[.!?]|(?=\n|$))", text) if m.group().strip()]
 
 
 def _scoped_clauses(unit):
@@ -149,10 +294,23 @@ class LocalUnderstandingProvider:
         if len(scenario)>MAX_SCENARIO_LENGTH:
             return UnderstandingResult((CaseActor('user','You',kind='professional'),),limitations=('Scenario exceeds the supported local text limit; enter focused structured facts.',))
         old=extract_context(scenario)
-        actors={'user':CaseActor('user','You',role='' if old.context.role=='Unknown' else old.context.role,kind='professional')}
+        units=_units(scenario)
+        fields={}
+        for unit in units:
+            field = _context_field(unit)
+            if field:
+                name, value, status = field
+                fields.setdefault(name, (value, unit, status))
+        role = fields['role'][0] if 'role' in fields else old.context.role
+        role_sources = (fields['role'][1],) if 'role' in fields else old.evidence['role']
+        if 'role' not in fields and role == 'Unknown':
+            compound_roles = dict(result for unit in units if (result := _compound_role(unit)))
+            if len(compound_roles) == 1:
+                role, excerpt = next(iter(compound_roles.items()))
+                role_sources = (excerpt,)
+        actors={'user':CaseActor('user','You',role='' if role=='Unknown' else role,kind='professional')}
         facts={}
         actions={}
-        units=_units(scenario)
         org_names={}
         family_ids={}
         employment={}
@@ -162,7 +320,7 @@ class LocalUnderstandingProvider:
             low=label.casefold()
             if low in {'i','me','you','yourself','myself','user'}:return 'user'
             if low in {'my firm','your firm','our firm','the firm','firm'}: key='firm';label='Your firm';kind='organisation'
-            elif low in {'my company','your company','our company','the company','company','manufacturing company'}: key='company';label='Manufacturing company' if 'manufacturing company' in scenario.lower() else 'Your organisation';kind='organisation'
+            elif low in {'company','manufacturing company','organisation','organization'} or re.fullmatch(r'(?:my|your|our|the)\s+(?:company|organisation|organization)',low): key='company';label='Manufacturing company' if 'manufacturing company' in scenario.lower() else 'Your organisation';kind='organisation'
             elif low=='listed client':key='client';label='Listed client';kind='organisation'
             elif low in {'cfo','chief financial officer'}:key='cfo';label='CFO';role=role or 'Chief financial officer'
             elif low in {'ceo','chief executive officer'}:key='ceo';label='CEO';role=role or 'Chief executive officer'
@@ -183,7 +341,7 @@ class LocalUnderstandingProvider:
             for key,item in actors.items():
                 if key=='user':continue
                 candidates=[item.label]
-                if key in {'firm','company','client'}:candidates+= {'firm':['firm'],'company':['company'],'client':['client']}[key]
+                if key in {'firm','company','client'}:candidates+= {'firm':['firm'],'company':['company','organisation','organization'],'client':['client']}[key]
                 if key.startswith('family_'):candidates += [key.removeprefix('family_')]
                 if key=='cfo':candidates+=['chief financial officer']
                 for name in candidates:
@@ -231,7 +389,7 @@ class LocalUnderstandingProvider:
                 actor(m.group(),kind='organisation')
             for m in _TITLE.finditer(unit):
                 if _absent_actor(unit,m.start()):continue
-                if any(excerpt in unit and unit.find(excerpt)<=m.start()<unit.find(excerpt)+len(excerpt) for excerpt in old.evidence['role']):continue
+                if any(excerpt in unit and unit.find(excerpt)<=m.start()<unit.find(excerpt)+len(excerpt) for excerpt in role_sources):continue
                 if re.match(r"[’']s\s+assistant\b",unit[m.end():],re.I):continue
                 actor(m.group(),role=m.group())
             for m in _RECIPIENT_GROUP.finditer(unit):
@@ -249,10 +407,12 @@ class LocalUnderstandingProvider:
                         orgid=actor(org,kind='organisation')
                         employment[relative]=orgid
                         fact(relative,'employment','Employment at external organisation',clause,orgid)
-        if old.context.role!='Unknown':
-            excerpt=next(iter(old.evidence['role']), '')
-            if excerpt:fact('user','role',old.context.role,excerpt)
-        if old.context.decision!='Unknown':
+        for name, (value, excerpt, status) in fields.items():
+            fact('user',name,value,excerpt,status=status)
+        if 'role' not in fields and role!='Unknown':
+            excerpt=next(iter(role_sources), '')
+            if excerpt:fact('user','role',role,excerpt)
+        if 'decision' not in fields and old.context.decision!='Unknown':
             excerpts=old.evidence['decision']
             if excerpts:
                 spans = [(scenario.find(text), len(text)) for text in excerpts if text in scenario]
@@ -271,7 +431,7 @@ class LocalUnderstandingProvider:
             close=re.search(r'\b(?:close\s+(?:personal\s+)?friend(?:s)?|long[-\s]standing\s+friend)\b',unit,re.I)
             if close and not _negated(unit,close.start()):
                 third_party=re.search(r"\b(?:of\s+the\s+(?:CEO|CFO)|(?:CEO|manager|director)[’']s\s+close\s+friend)\b",unit,re.I)
-                linked=bool(re.search(r'\b(?:my|your|our)\s+close\b|\b(?:I\s+am|you\s+are|we\s+are)\s+close\s+friends?\s+with\b',unit,re.I)) or bool(re.search(r'\b(?:CFO|chief\s+financial\s+officer|director|partner)\s*,\s*a\s+close\s+(?:personal\s+)?friend',unit,re.I) and old.context.role!='Unknown')
+                linked=bool(re.search(r'\b(?:my|your|our)\s+close\b|\b(?:I\s+am|you\s+are|we\s+are)\s+close\s+friends?\s+with\b',unit,re.I)) or bool(re.search(r'\b(?:CFO|chief\s+financial\s+officer|director|partner)\s*,\s*a\s+close\s+(?:personal\s+)?friend',unit,re.I) and role!='Unknown')
                 if linked and not third_party:
                     counterpart=next((key for key in personal_mentions if not key.startswith('family_')), '')
                     if counterpart:
@@ -305,13 +465,20 @@ class LocalUnderstandingProvider:
             # explicitly mentioned. It is not assigned to the professional as
             # a personal loan or personal financial reward.
             finance = _ORG_FINANCE.search(unit)
-            if finance and not _negated(unit, finance.start()):
+            decision = next((f.value for f in facts.values() if f.predicate == 'decision' and f.status == 'reported'), '')
+            connection = _financing_connection(unit, finance, decision) if finance else None
+            # A reported denial of the connection does not establish that the
+            # organisation has no financing interest; keep its reported source.
+            absent_finance = finance and re.search(
+                r'\b(?:no|without|not\s+(?:have|hold))\s+(?:(?:a|an|the|any|known|current|existing)\s+){0,3}$',
+                unit[:finance.start()], re.I,
+            )
+            if finance and not absent_finance and (not _negated(unit, finance.start()) or connection in {'No', 'Unknown'} or _reported_financing_denial(unit, finance)):
                 prior_orgs = [key for _,key in mentions(unit[:finance.start()]) if actors[key].kind=='organisation']
                 owner = prior_orgs[-1] if prior_orgs else org
                 if owner:
                     value = 'Organisational financing or loan covenant interest'
                     fact(owner,'interest',value,unit,owner,attribution=actors[owner].label)
-                    connection = _connection_value(unit[finance.start():])
                     if connection:
                         fact(owner,'interest_connection',connection,unit,owner,status='unknown' if connection=='Unknown' else 'reported')
             commercial=_FIRM_INCENTIVE.search(unit)
@@ -324,7 +491,7 @@ class LocalUnderstandingProvider:
                     owner=actor('Your company',kind='organisation');target=org or owner;value='Organisational profit target'
                 fact(owner,'interest',value,unit,target,attribution=actors[owner].label)
                 if _LINK.search(unit):fact(owner,'interest_connection','Yes',unit,target)
-            signal=extract_signals(unit,user_role=old.context.role)
+            signal=extract_signals(unit,user_role=role)
             linked_career=re.search(r'\b(?:says?|told|warns?|warned)\b[^.!?;]{0,90}\b(?:my|your)\s+(?:promotion|job|career)\b[^.!?;]{0,65}\b(?:depends?|conditional|unless)\b[^.!?;]{0,90}\b(?:favour|favor|recommend|approv|accept|sign)\w*\b',unit,re.I)
             if signal.pressure=='Reported pressure or threatened consequences' or linked_career or _directed_pressure(unit):
                 speaker=next((key for key in personal_mentions if not key.startswith('family_')), '')
@@ -344,13 +511,9 @@ class LocalUnderstandingProvider:
             advocacy=re.search(r'\b(?:I|you|we)\b[^.!?]{0,45}\b(?:promot(?:e|ed|ing)|advocat(?:e|ed|ing)|campaign(?:ed|ing)?\s+for|represented)\b[^.!?]{0,130}\b(?:now|then|also)\b[^.!?]{0,65}\b(?:objective|independent|assess|evaluat|review)\w*\b',unit,re.I)
             if advocacy and re.search(r'\b(?:assess|evaluat|review)\w*\b[^.!?]{0,25}\b(?:it|that|same|this)\b',unit,re.I) and not _negated(unit,advocacy.start()):fact('user','advocacy','Promoting a position while expected to assess it objectively',unit)
             # Explicit structured equivalents can be reused instead of being asked again.
-            if re.search(r'\b(?:I|you|we)\s+(?:make|recommend|approve|select|decide)\b|\b(?:I|you)\s+(?:am|are)\s+responsible\s+for\s+(?:approv|decid|select)',unit,re.I):
-                fact('user','decision_responsibility','I make or recommend the decision',unit)
-            elif re.search(r'\b(?:I|you|we)\s+(?:review|supervise|am\s+reviewing|are\s+reviewing)\b|\byou\s+are\s+[^.!?]{0,55}\breviewing\b',unit,re.I):
-                fact('user','decision_responsibility','I supervise or review the work',unit)
-            elif re.search(r'\b(?:I|you|we)\s+(?:compare|prepare|assess|evaluate)\b|\b(?:I\s+am|you\s+are|we\s+are)\s+[^.!?;]{0,80}\b(?:preparing|assessing|evaluating|comparing)\b',unit,re.I):
-                if not re.search(r'\b(?:not|never|do\s+not|do[ne][’\']t)\b', unit, re.I):
-                    fact('user','decision_responsibility','I prepare or assess the work',unit)
+            responsibility = _professional_responsibility(unit, role)
+            if responsibility:
+                fact('user','decision_responsibility',responsibility,unit)
             if re.search(r'\b(?:I|you)\s+(?:have|has)\s+no\s+(?:involvement|responsibility)\b',unit,re.I):fact('user','decision_responsibility','I have no involvement in this decision',unit)
             participation_clauses = _scoped_clauses(unit)
             for relative,employer in employment.items():

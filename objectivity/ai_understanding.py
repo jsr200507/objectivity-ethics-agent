@@ -240,6 +240,10 @@ def _validate_fact(subject, predicate, value, obj, status, sentence, actors, loc
     if predicate in {'role', 'decision'} and subject != 'user':
         _reject()
     if predicate == 'role' and status == 'reported':
+        # Explicit Role: fields have no I/you cue. Reuse only the same literal,
+        # locally attributed role; a later director's title cannot substitute.
+        if _local_fact_matches(local, subject, predicate, value, obj, status, sentence):
+            return
         cue = re.search(r'\b(?:I\s+(?:am|work\s+as|serve\s+as)|you\s+(?:are|work\s+as|serve\s+as)|my\s+role\s+is|your\s+role\s+is|in\s+my\s+capacity\s+as)\s+(?:(?:a|an|the)\s+)?', sentence, re.I)
         if not cue:
             _reject()
