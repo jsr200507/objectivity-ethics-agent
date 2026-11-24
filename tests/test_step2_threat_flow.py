@@ -485,6 +485,99 @@ class Step2SupplementalEvaluationTests(unittest.TestCase):
         self.assertTrue(all(outcome.status != ACCEPTABLE for outcome in assess_actions(ui.case()).outcomes))
 
 
+class Step2RouteAndNeutralWordingTests(unittest.TestCase):
+    def intimidation(self, challenge, authority='No such authority or influence', changed='No'):
+        case = start_case(SCENARIO)
+        run_interview(case, {'challenge_safety': challenge, 'pressure_authority': authority,
+                             'work_changed': changed, 'work_change_details': 'Investigation or evidence gathering'})
+        snapshot = reason_case(case)
+        threat = next(t for t in snapshot.threats if t.kind == 'Intimidation')
+        return case, snapshot, preliminary_assessment(case, snapshot, threat)
+
+    def test_no_authority_and_no_known_route_remain_uncertain_not_narrowed(self):
+        case, snapshot, result = self.intimidation('No practicable route is known')
+        self.assertEqual(result.significance, 'Significance remains uncertain')
+        self.assertNotIn('narrows that particular influence channel', ' '.join(result.factors))
+        self.assertIn('No practicable route is known', ' '.join(result.factors))
+        self.assertIn('not evidence of explicit retaliation or coercion', ' '.join(result.factors))
+        self.assertIn('Possible future pressure still needs consideration', ' '.join(result.factors))
+        self.assertFalse(plan_questions(case).questions)
+        self.assertEqual(reason_case(case), snapshot)
+
+    def test_no_authority_and_safe_challenge_still_narrow_only_the_relevant_channels(self):
+        _, _, result = self.intimidation('I can challenge or escalate without adverse consequences')
+        self.assertIn('Influence channels narrowed; future pressure remains', result.significance)
+        self.assertNotIn('heightened', result.significance)
+        self.assertIn('not establish that the threat has been eliminated', ' '.join(result.factors))
+
+    def test_concern_without_stated_consequence_does_not_become_reported_retaliation(self):
+        _, _, result = self.intimidation('I am concerned but no consequence has been stated')
+        self.assertIn('uncertain', result.significance)
+        self.assertNotIn('heightened', result.significance)
+        self.assertIn('no adverse consequence has been stated', ' '.join(result.factors))
+        self.assertFalse(any(text.startswith('Reported adverse consequences may heighten') for text in result.factors))
+
+    def test_no_route_and_independent_reported_authority_can_support_heightened_influence(self):
+        _, _, result = self.intimidation('No practicable route is known', 'Both work and career influence')
+        self.assertIn('Potentially heightened influence', result.significance)
+        self.assertIn('uncertain', result.significance)
+        self.assertIn('Reported authority over work or career', ' '.join(result.factors))
+        self.assertIn('not evidence of explicit retaliation or coercion', ' '.join(result.factors))
+
+    def test_no_route_and_changed_work_can_support_heightened_influence(self):
+        _, _, result = self.intimidation('No practicable route is known', changed='Yes')
+        self.assertIn('Potentially heightened influence', result.significance)
+        self.assertIn('uncertain', result.significance)
+        self.assertIn('A reported change to work', ' '.join(result.factors))
+        self.assertNotIn('narrows that particular influence channel', ' '.join(result.factors))
+
+    def assert_neutral(self, case, kind):
+        from objectivity.case_reasoning import ACTION_REQUIRED
+        snapshot = reason_case(case)
+        threat = next(t for t in snapshot.threats if t.kind == kind)
+        evaluation = next(e for e in snapshot.evaluations if e.threat_id == threat.id)
+        self.assertEqual(evaluation.outcome, ACTION_REQUIRED)
+        before, residual = deepcopy(case), assess_actions(case)
+        result = preliminary_assessment(case, snapshot, threat)
+        self.assertEqual(result.significance, 'Potentially significant influence')
+        self.assertEqual(snapshot, reason_case(case))
+        self.assertEqual(before, case)
+        self.assertEqual(residual, assess_actions(case))
+        report = build_case_report(case)
+        preliminary = report.split('## C. Threat evaluation')[1].split('## E. Actions taken')[0]
+        self.assertIn('Potentially significant influence', preliminary)
+        self.assertNotIn('Potential threat requiring a response', preliminary)
+        self.assertNotIn('at an acceptable level', preliminary.lower())
+
+    def test_familiarity_uses_neutral_significance_label(self):
+        from tests.test_case_reasoning import case, fact, responsible
+        self.assert_neutral(case(responsible(), fact('friend', 'close_relationship', 'Close personal friendship', object_id='cfo')), 'Familiarity')
+
+    def test_self_review_uses_neutral_significance_label(self):
+        from tests.test_case_reasoning import case, fact, responsible
+        self.assert_neutral(case(responsible(), fact('own-work', 'self_review', 'Reviewing my own earlier work')), 'Self-review')
+
+    def test_advocacy_uses_neutral_significance_label(self):
+        from tests.test_case_reasoning import case, fact, responsible
+        self.assert_neutral(case(responsible(), fact('promoted', 'advocacy', 'Promoted a position now objectively assessed')), 'Advocacy')
+
+    def test_personal_self_interest_uses_neutral_significance_label(self):
+        self.assert_neutral(source_case(), 'Self-interest')
+
+    def test_supported_narrowing_keeps_its_label_and_step3_result(self):
+        from objectivity.case_reasoning import ACCEPTABLE
+        case = source_case()
+        connection = next(f for f in case.facts if f.predicate == 'interest_connection')
+        edit_case_fact(case, connection.id, 'No')
+        review_case(case)
+        snapshot = reason_case(case)
+        residual = assess_actions(case)
+        result = preliminary_assessment(case, snapshot, snapshot.threats[0])
+        self.assertEqual(result.significance, 'Recorded circumstances narrow this potential threat')
+        self.assertEqual(residual, assess_actions(case))
+        self.assertTrue(all(o.status == ACCEPTABLE for o in residual.outcomes))
+
+
 class Step2StreamlitTests(unittest.TestCase):
     def setUp(self):
         self.ui = ui_helpers.ScenarioCaseAppTests()

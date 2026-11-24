@@ -61,6 +61,10 @@ def _supplemental_significance(case, threat, source, facts, evaluation, gaps, de
         authority_absent = reported(authority, {'No such authority or influence'})
         adverse = reported(challenge, {'Adverse consequences have been reported'})
         safe_challenge = reported(challenge, {'I can challenge or escalate without adverse consequences'})
+        no_route = reported(challenge, {'No practicable route is known'})
+        concern_only = reported(challenge, {'I am concerned but no consequence has been stated'})
+        if no_route or concern_only:
+            uncertainty = '; significance remains uncertain'
         if authority_present:
             notes.append('Reported authority over work or career may heighten the influence of the request; a job title alone is not evidence of that authority.')
         if adverse:
@@ -68,14 +72,23 @@ def _supplemental_significance(case, threat, source, facts, evaluation, gaps, de
         if _is_yes(changed):
             notes.append('A reported change to work indicates potentially heightened influence and calls for attention to the affected work; it does not establish technical error or misconduct.')
         if authority_absent:
-            notes.append('The reported absence of work or career authority narrows that particular influence channel without resolving other possible pressure.')
+            if no_route:
+                notes.append('No work or career authority is reported, but this does not establish a practicable way to challenge the request.')
+            else:
+                notes.append('The reported absence of work or career authority narrows that particular influence channel without resolving other possible pressure.')
         if safe_challenge:
             notes.append('A reported ability to challenge safely narrows that influence channel; it is not evidence of an implemented or effective safeguard.')
+        if no_route:
+            notes.append('No practicable challenge or escalation route is reported as known. This is not evidence of explicit retaliation or coercion, and does not establish that no route exists.')
+        if concern_only:
+            notes.append('Concern is reported, but no adverse consequence has been stated; concern alone is not evidence of actual retaliation or coercion.')
         if _is_no(changed):
             notes.append('No actual change to work is reported. That account does not exclude possible future pressure.')
         notes.append('Possible future pressure still needs consideration. Narrowing an influence channel does not establish that the threat has been eliminated.')
         if authority_present or adverse or _is_yes(changed):
             return 'Potentially heightened influence' + uncertainty, tuple(notes)
+        if no_route:
+            return 'Significance remains uncertain', tuple(notes)
         if authority_absent or safe_challenge:
             return 'Influence channels narrowed; future pressure remains' + uncertainty, tuple(notes)
         return 'Significance remains uncertain', tuple(notes)
@@ -102,7 +115,7 @@ def preliminary_assessment(case, snapshot, threat, plan=None):
     if evaluation and evaluation.outcome == ACCEPTABLE:
         significance = 'Recorded circumstances narrow this potential threat'
     elif evaluation and evaluation.outcome == ACTION_REQUIRED:
-        significance = 'Potential threat requiring a response'
+        significance = 'Potentially significant influence'
     factors = [_preliminary_reason(text) for text in evaluation.reasoning if text != threat.mechanism] if evaluation else []
     gaps = list(evaluation.material_gaps) if evaluation else ['A threat-specific evaluation is not established.']
     facts = _live(case)
