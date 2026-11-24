@@ -338,6 +338,9 @@ class LocalUnderstandingProvider:
                 named = [key for _,key in mentions(unit)]
                 speaker=personal_mentions[0] if personal_mentions else named[0] if named else 'user' if re.search(r'\b(?:I|you|we)\s+(?:have\s+)?(?:estimated|noticed|observed|identified|found|assumed|forecast|projected|believe|consider)\b', unit, re.I) or re.match(r'\s*(?:I|you|we)\b', unit, re.I) else actor('Reported claimant',kind='unknown')
                 fact(speaker,'claim',unit.rstrip('.!?'),unit,attribution=speaker)
+            evidence_gap = re.search(r'\b(?:not\s+yet|have\s+not|haven[’\']t|insufficient|lack\s+of|no)\b[^.!?;]{0,100}\b(?:supporting\s+evidence|evidence|documentation|records|support)\b', unit, re.I)
+            if evidence_gap and re.search(r'\b(?:I|you|we)\b', unit, re.I):
+                fact('user','claim',unit.rstrip('.!?'),unit,attribution='You')
             # Self-review and advocacy require their own supported mechanisms, not an audit-role keyword.
             selfreview=re.search(r'\b(?:review(?:ing)?|audit(?:ing)?|assess(?:ing)?)\b[^.!?;]{0,75}\b(?:my\s+own|our\s+own|your\s+own|I\s+(?:previously\s+)?prepared|you\s+(?:previously\s+)?prepared)\b|\b(?:I|you)\s+(?:prepared|developed|calculated)\b[^.!?]{0,120}\b(?:now|then)\b[^.!?]{0,55}\b(?:review|audit|assess)\s+(?:it|the\s+same|that|this)\b',unit,re.I)
             if selfreview and not _negated(unit,selfreview.start()):fact('user','self_review','Reviewing or relying on own earlier work',unit)
