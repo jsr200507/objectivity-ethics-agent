@@ -285,7 +285,7 @@ def _action_editor(case,snapshot,navigate,*,expanded=False):
 
 
 def _address(case,snapshot,navigate):
-    from .case_actions import assess_actions, action_questions, _recommendation
+    from .case_actions import assess_actions, action_questions
     from .case_reasoning import ACCEPTABLE
     from .case_actions import SUPPORTED
 
@@ -294,6 +294,7 @@ def _address(case,snapshot,navigate):
 
     result = assess_actions(case, snapshot)
     outcomes = {outcome.threat_id: outcome for outcome in result.outcomes}
+    recommendations = {item.threat_id: item for item in result.recommendations}
     response_needed = bool(snapshot.threats) and any(
         outcome.status not in {ACCEPTABLE, SUPPORTED} for outcome in result.outcomes
     )
@@ -322,27 +323,20 @@ def _address(case,snapshot,navigate):
                 elif outcome and outcome.status == SUPPORTED:
                     st.success('The recorded action evidence conditionally supports the response for this threat.')
                 else:
-                    linked_actions = [action for action in result.actions if threat.id in action.covered_threats]
-                    recommendation = _recommendation(case, threat, linked_actions)
-                    prefix, remainder = recommendation.split('Primary: ', 1)
-                    if ' Context: ' in remainder:
-                        primary, remainder = remainder.split(' Context: ', 1)
-                        context, remainder = remainder.split(' Alternative: ', 1)
+                    recommendation = recommendations.get(threat.id)
+                    if recommendation:
+                        st.markdown('**Primary safeguard**')
+                        st.write(recommendation.primary)
+                        if recommendation.remit:
+                            st.caption(recommendation.remit)
+                        if recommendation.context:
+                            st.caption('Case-specific consideration: ' + recommendation.context)
+                        st.markdown('**Alternative if the primary response is unavailable**')
+                        st.write(recommendation.alternative)
+                        st.markdown('**Supporting actions and evidence**')
+                        st.write(recommendation.supporting)
                     else:
-                        primary, remainder = remainder.split(' Alternative: ', 1)
-                        context = ''
-                    alternative, supporting = remainder.split(' Supporting: ', 1)
-
-                    st.markdown('**Primary safeguard**')
-                    st.write(primary.strip())
-                    if prefix.strip():
-                        st.caption(prefix.strip())
-                    if context.strip():
-                        st.caption('Case-specific consideration: ' + context.strip())
-                    st.markdown('**Alternative if the primary response is unavailable**')
-                    st.write(alternative.strip())
-                    st.markdown('**Supporting actions and evidence**')
-                    st.write(supporting.strip())
+                        st.caption('A case-specific recommendation is not available from the current rule set; retain the unresolved limitation and seek appropriate professional guidance.')
 
                 if outcome:
                     with st.expander('Residual assessment and unresolved points'):
