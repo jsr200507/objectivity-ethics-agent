@@ -275,6 +275,15 @@ class CaseRecommendationTests(unittest.TestCase):
         self.assertIn('keep the response proportionate', after)
         self.assertTrue(sample.fact_history)
 
+    def test_report_places_case_specific_safeguards_before_action_history_follow_up(self):
+        sample = property_case()
+        report = build_case_report(sample)
+        primary = report.index("**Primary:**")
+        history = report.index("Establish what has already been done or planned")
+        self.assertLess(primary, history)
+        self.assertIn("**Alternative:**", report)
+        self.assertIn("**Supporting evidence:**", report)
+
     def test_report_structure_and_proposed_implemented_distinction_remain_intact(self):
         sample = property_case()
         before = deepcopy(sample)
