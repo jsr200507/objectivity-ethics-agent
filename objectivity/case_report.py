@@ -281,7 +281,12 @@ def build_case_report(case: CaseState) -> str:
     lines += ["## H. Prioritised next steps", ""]
     steps = tuple(dict.fromkeys(step for step in addressed.next_steps if step))
     if steps:
-        for number, step in enumerate(steps, 1):
+        # Put case-specific safeguards first; action-history clarification is
+        # retained as a limitation/follow-up, not the opening recommendation.
+        ordered_steps = tuple(step for step in steps if "Primary: " in step) + tuple(
+            step for step in steps if "Primary: " not in step
+        )
+        for number, step in enumerate(ordered_steps, 1):
             if "Primary: " not in step or "Alternative: " not in step or "Supporting: " not in step:
                 lines += [f"{number}. {_escaped(step)}", ""]
                 continue
