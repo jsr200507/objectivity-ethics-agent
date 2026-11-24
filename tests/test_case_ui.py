@@ -139,13 +139,7 @@ class ScenarioCaseAppTests(unittest.TestCase):
         self.click("Review existing actions")
         self.assertEqual(self.app.session_state["view"], "case_address")
 
-    def expand_action_editor(self):
-        expander = self.widget("expander", "Add or edit an action record")
-        expander.expand().run()
-        self.healthy()
-
     def save_review(self, stage, evidence=""):
-        self.expand_action_editor()
         self.widget("text_area", "What has been done or proposed?").input(
             "Independent review of the year-end judgments and the bonus-linked influence"
         )
@@ -373,7 +367,6 @@ class ScenarioCaseAppTests(unittest.TestCase):
         self.begin(PLANNED_REVIEW)
         original = deepcopy(self.case().actions[0])
         self.to_actions()
-        self.expand_action_editor()
         self.assertEqual(self.widget('selectbox', 'Action record').value, original.id)
         self.assertEqual(self.widget('text_area', 'What has been done or proposed?').value, original.description)
         self.assertEqual(self.widget('selectbox', 'Reported action status').value, 'Planned')
