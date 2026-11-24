@@ -207,7 +207,7 @@ def _material_question(case,snapshot,navigate,plan):
 
 
 def _preliminary_findings(case, snapshot, plan):
-    st.subheader('Preliminary threat assessment')
+    st.subheader('Overall preliminary assessment')
     st.caption('Significance is assessed before safeguards. It is not a final residual-acceptability conclusion.')
     for index, threat in enumerate(snapshot.threats, 1):
         result = preliminary_assessment(case, snapshot, threat, plan)
@@ -402,7 +402,7 @@ def _address(case,snapshot,navigate):
             else:
                 navigate('case_address')
 
-    _action_editor(case, snapshot, navigate, expanded=False)
+    _action_editor(case, snapshot, navigate, expanded=bool(case.actions))
     if st.button('Generate Objectivity report', type='primary'):
         navigate('case_report')
     if st.button('Return to evaluation'):
