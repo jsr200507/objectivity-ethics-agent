@@ -238,7 +238,7 @@ class CaseRecommendationTests(unittest.TestCase):
                     action(sample, stage=stage, checks={}, evidence='')
                 before = assess_actions(sample)
                 questions = action_questions(sample)
-                with patch('objectivity.case_actions._recommendation', return_value='Different wording only.'):
+                with patch('objectivity.case_actions._format_recommendation', return_value='Different wording only.'):
                     after = assess_actions(sample)
                 self.assertEqual(replace(before, next_steps=()), replace(after, next_steps=()))
                 self.assertEqual(questions, action_questions(sample))
