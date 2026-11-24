@@ -59,7 +59,7 @@ OBJECTIVITY_AI_FREE_TIER_CONFIRMED = true
 OBJECTIVITY_AI_MAX_REQUESTS = 3
 OBJECTIVITY_AI_MAX_INPUT_TOKENS = 7000
 OBJECTIVITY_AI_MAX_OUTPUT_TOKENS = 1800
-OBJECTIVITY_AI_TIMEOUT_SECONDS = 12
+OBJECTIVITY_AI_TIMEOUT_SECONDS = 30
 ```
 
 Environment variables with these exact names are also supported. Use the string
@@ -132,7 +132,9 @@ optional overview call. This is an engineering target, not a provider allowance.
   bytes plus message overhead as a token-budget ceiling. This is not an exact
   model-token count. Input settings are bounded to `256–16384`.
 - Requested output defaults to `1800` tokens and is bounded to `128–4096`.
-- The HTTP I/O timeout defaults to `12` seconds and is bounded to `2–30`.
+- The HTTP I/O timeout defaults to `30` seconds and is bounded to `2–60`.
+  An explicitly configured timeout is respected; an existing setting of `12`
+  does not automatically become `30`.
 - Requests and failures are cached by purpose, actual prompt, relevant source
   signature, provider, model and generation settings within the active session.
   Repeated reruns do not resubmit a completed attempt. A material report change
@@ -184,3 +186,87 @@ timeouts, limits, rerun reuse, changed facts and contradictory report wording.
 They do not establish live API connectivity or current free-tier access. Browser
 tests must separately exercise the full no-key fallback journey, confirmation,
 editing, refresh/resume, actual JSON upload/download and report download.
+
+## Groq connectivity hotfix — GPT-OSS 120B
+
+The operator reports an active Groq Free Plan and successful Playground use of
+`openai/gpt-oss-120b`. This confirms their reported account/model access, but not
+the separate Streamlit-to-Groq connection. No deployment credential was available
+in this workspace, and no live inference call was made during this hotfix.
+
+The baseline mapped HTTP 403, HTTP 5xx and most connection errors to the same
+`unavailable` message. That message cannot establish the deployed root cause.
+The hotfix distinguishes DNS/network, proxy, TLS, timeout, HTTP 400/401/403/404/
+429/5xx, invalid JSON, truncated output, runtime errors, and application schema or
+evidence rejection. An application validation rejection means JSON was returned;
+it is not labelled as a network failure. Server warnings contain only the fixed
+category and allowlisted technical fields, never error bodies, keys or prompts.
+
+Hosted Groq documentation requests were rejected by this workspace's proxy (403).
+Groq's official Python SDK documentation was readable and checked at commit
+[`55066d94acca028c3cb74e050f2711b80ade6298`](https://github.com/groq/groq-python/tree/55066d94acca028c3cb74e050f2711b80ade6298):
+
+- [Chat request parameters](https://github.com/groq/groq-python/blob/55066d94acca028c3cb74e050f2711b80ade6298/src/groq/types/chat/completion_create_params.py)
+  list GPT-OSS 120B, JSON-object mode, `max_completion_tokens`, and GPT-OSS
+  `reasoning_effort` values `low`, `medium` and `high` (default `medium`).
+- [Chat resource](https://github.com/groq/groq-python/blob/55066d94acca028c3cb74e050f2711b80ade6298/src/groq/resources/chat/completions.py)
+  uses `/openai/v1/chat/completions`.
+- [Response documentation](https://github.com/groq/groq-python/blob/55066d94acca028c3cb74e050f2711b80ade6298/src/groq/types/chat/chat_completion.py)
+  distinguishes `stop` from `length` (token limit).
+
+JSON-object mode is retained. The deprecated `max_tokens` alias is replaced by
+`max_completion_tokens`; deprecation alone does not prove it caused this failure.
+GPT-OSS requests explicitly use low reasoning effort to conserve latency and the
+existing output allowance. Reasoning-format/include-reasoning combinations are
+not added. The client identifies itself with a fixed User-Agent, keeps normal CA
+verification/proxy handling and rejects redirects. Truncated or ungrounded output
+is still rejected. None of these changes proves the live connection is repaired.
+
+### One explicit operator check in Streamlit Cloud
+
+1. Create a **separate** test app from `fix/groq-api-connectivity`, entrypoint
+   `app.py`, Python `3.12`; do not repoint existing deployments automatically.
+2. Copy the existing server-side Groq settings into that app's Secrets, including
+   `GROQ_API_KEY`, provider `groq` and free-tier confirmation. Add:
+
+   ```toml
+   OBJECTIVITY_AI_MODEL = "openai/gpt-oss-120b"
+   OBJECTIVITY_AI_TIMEOUT_SECONDS = 30
+   OBJECTIVITY_AI_DIAGNOSTICS_ENABLED = true
+   OBJECTIVITY_AI_DIAGNOSTIC_TOKEN = "REPLACE_WITH_A_SEPARATE_RANDOM_OPERATOR_CODE"
+   ```
+
+   Replace the access-code placeholder with a private value of at least 16
+   characters. It must be different from the API key. Never put the API key in
+   the browser input, repository, screenshots or diagnostic feedback.
+3. On Scenario Input, expand **Operator: Groq connectivity diagnostic**, enter
+   the separate code and select **Run one fictional Groq check** once.
+4. The check sends one built-in fictional scenario, using the same provider,
+   parameters and source-validation pipeline. It reports configuration, HTTPS,
+   authenticated completion-envelope response, JSON parsing, and full fictional
+   source validation separately. Only a 2xx completion response establishes the
+   authenticated-response check. A 403 or 5xx response does not establish it.
+5. Record only the category, stage statuses and safe technical fields. These
+   include HTTP status, a bounded request ID when available, finish reason and
+   exception class. The same safe failure category is available in app logs.
+   No raw generated content or confidential assessment is displayed or sent.
+
+The probe has a separate one-request session allowance and shares the process
+rate/concurrency guard. Reruns and repeat clicks reuse its success or failure.
+It does not change assessment answers or their request budget. After changing
+Secrets, deliberately reload into a fresh session before checking again; there
+are no automatic retries. Disable `OBJECTIVITY_AI_DIAGNOSTICS_ENABLED` and remove
+the diagnostic token after verification.
+
+If stages 1–5 pass, one real fictional API/understanding request has succeeded.
+If JSON succeeds but the final stage fails, investigate application schema or
+attribution compatibility without disabling grounding checks. A successful
+fictional probe does not verify real scenario facts or guarantee every model
+response will pass validation. Use a fresh fictional assessment with normal AI
+consent for the next end-to-end check.
+
+Targeted checks (mocked; no API quota consumed):
+
+```bash
+python -m unittest tests.test_groq_connectivity tests.test_ai_provider tests.test_ai_usage tests.test_ai_ui -v
+```

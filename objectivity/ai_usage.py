@@ -5,13 +5,16 @@ not an account-level entitlement or a substitute for provider-enforced quotas.
 """
 from collections import deque
 from copy import deepcopy
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 import hashlib
 import json
+import logging
 import threading
 import time
 
-from .ai_provider import AIConfig, AIProviderError, JSONProvider
+from .ai_provider import AIConfig, AIProviderError, JSONProvider, safe_diagnostics
+
+_LOGGER = logging.getLogger(__name__)
 
 
 @dataclass(frozen=True)
@@ -21,6 +24,7 @@ class AIResult:
     reason: str = "unavailable"
     reused: bool = False
     attempted: bool = False
+    diagnostic: dict = field(default_factory=dict)
 
     @property
     def mode(self):
@@ -117,7 +121,7 @@ class AISession:
         with self._lock:
             if key in self._cache:
                 cached = self._cache[key]
-                return AIResult(deepcopy(cached.data), cached.status, cached.reason, True, False)
+                return AIResult(deepcopy(cached.data), cached.status, cached.reason, True, False, deepcopy(cached.diagnostic))
             if self._provider_block:
                 return AIResult(reason=self._provider_block)
             if self.attempts >= min(self.max_requests, config.max_requests, 3):
@@ -129,17 +133,21 @@ class AISession:
                 data = provider.generate(system, user)
                 if not isinstance(data, dict):
                     raise AIProviderError("malformed")
-                result = AIResult(deepcopy(data), "assisted", "", attempted=True)
+                result = AIResult(deepcopy(data), "assisted", "", attempted=True,
+                                  diagnostic=safe_diagnostics(getattr(provider, 'diagnostic', {})))
             except AIProviderError as error:
-                result = AIResult(reason=error.code, attempted=True)
-                if error.code in {"rate_limit", "quota_exhausted", "credentials_rejected", "unsupported"}:
+                result = AIResult(reason=error.code, attempted=True, diagnostic=error.diagnostic)
+                _LOGGER.warning('Optional AI failed: category=%s details=%s', error.code, error.diagnostic)
+                if error.code in {"rate_limit", "quota_exhausted", "credentials_rejected", "unsupported", "bad_request", "forbidden"}:
                     self._provider_block = error.code
                 if error.code in {"rate_limit", "quota_exhausted"}:
                     self._limiter.cooldown()
-            except Exception:
+            except Exception as error:
                 # Provider implementations must never leak raw error bodies,
                 # complete case content or credentials through the UI.
-                result = AIResult(reason="unavailable", attempted=True)
+                details = safe_diagnostics({'exception_type': type(error).__name__})
+                _LOGGER.warning('Optional AI failed: category=runtime_error details=%s', details)
+                result = AIResult(reason="runtime_error", attempted=True, diagnostic=details)
             finally:
                 self._limiter.release()
             self._cache[key] = result

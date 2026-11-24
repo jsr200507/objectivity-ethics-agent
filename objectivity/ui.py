@@ -6,6 +6,7 @@ from objectivity.examples import EXAMPLE_SCENARIO
 from objectivity.case_workflow import start_case, migrate_legacy_assessment
 from objectivity.case_ui import render_case
 from objectivity.ai_ui import understanding_choice, start_assisted_case
+from objectivity.ai_diagnostic import render_operator_diagnostic
 from objectivity.extraction import extract_context
 from objectivity.intake_ui import render_intake
 from objectivity.intake import sync_intake
@@ -70,6 +71,7 @@ def _scenario_view(assessment: Assessment) -> None:
             st.session_state.assessment = Assessment(scenario=EXAMPLE_SCENARIO, context=suggested)
             st.session_state.example_loaded = True
             _navigate("context")
+    render_operator_diagnostic()
     with st.form("scenario_entry"):
         scenario = st.text_area(
             "Your scenario", value=assessment.scenario, height=180,

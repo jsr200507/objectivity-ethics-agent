@@ -130,7 +130,7 @@ class AIUsageTests(unittest.TestCase):
         session=self.session()
         provider=Provider(ValueError('fictional-test-credential confidential scenario'))
         result=self.request(session,provider)
-        self.assertEqual(result.reason,'unavailable')
+        self.assertEqual(result.reason,'runtime_error')
         self.assertNotIn('confidential',repr(result))
         provider.generate=lambda *_:[]
         self.assertEqual(self.request(self.session(),provider).reason,'malformed')

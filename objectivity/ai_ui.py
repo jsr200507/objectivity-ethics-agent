@@ -6,16 +6,18 @@ findings always come from the existing deterministic assessment modules.
 """
 import hashlib
 import os
+import logging
 
 import streamlit as st
 
-from .ai_provider import AIConfig, GroqProvider
+from .ai_provider import AIConfig, GroqProvider, provider_error_message
 from .ai_usage import AISession
 from .case_model import CaseHistory
 from .case_workflow import start_case
 
 _REQUEST = 'Optional AI request'
 _METHOD = 'Scenario understanding method'
+_LOGGER = logging.getLogger(__name__)
 _CONFIG = (
     'GROQ_API_KEY', 'OBJECTIVITY_AI_PROVIDER', 'OBJECTIVITY_AI_MODEL',
     'OBJECTIVITY_AI_FREE_TIER_CONFIRMED', 'OBJECTIVITY_AI_MAX_REQUESTS',
@@ -37,6 +39,10 @@ _REASONS = {
     'malformed': 'The external response could not be safely validated.',
     'unavailable': 'External assistance is unavailable.',
 }
+
+
+def _reason_text(reason):
+    return _REASONS.get(reason, provider_error_message(reason))
 
 
 def load_config():
@@ -128,11 +134,12 @@ def start_assisted_case(scenario, *, consent=False):
                 case = start_case(local.scenario, _Proposals(proposals))
                 mode, reason = 'AI-assisted understanding', ''
             except (ValueError, TypeError, KeyError):
-                mode, reason = 'Deterministic fallback', 'malformed'
+                mode, reason = 'Deterministic fallback', 'application_validation'
+                _LOGGER.warning('AI understanding rejected: category=application_validation details=%s', response.diagnostic)
     elif consent:
         reason = config.disabled_reason
     _record_budget(case, session, 'understanding')
-    case.history.append(CaseHistory(_METHOD, mode, _REASONS.get(reason, '') if reason else '',
+    case.history.append(CaseHistory(_METHOD, mode, _reason_text(reason) if reason else '',
                                    case.revision, 'Suggestions remain reported and require user review.'))
     _bind(case, session)
     return case
@@ -193,7 +200,7 @@ def report_assistance(case):
                         except (ValueError, TypeError, KeyError):
                             message = 'The suggested overview failed consistency checks. The deterministic report is retained.'
                     else:
-                        message = _REASONS.get(response.reason, _REASONS['unavailable']) + ' The deterministic report is retained.'
+                        message = _reason_text(response.reason) + ' The deterministic report is retained.'
                     st.session_state['_ai_report_notice'] = (key, message)
                     if response.attempted:
                         # The sidebar builds exports/autosave before this form
