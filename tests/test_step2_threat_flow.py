@@ -1,6 +1,7 @@
 """Threat-grouped interview, bounded gaps and preliminary/residual separation."""
 from copy import deepcopy
 from dataclasses import asdict
+import re
 import unittest
 from unittest.mock import patch
 
@@ -626,6 +627,79 @@ class Step2StreamlitTests(unittest.TestCase):
         self.assertEqual(self.ui.app.radio[0].label, current.prompt)
         self.assertIsNone(self.ui.app.radio[0].value)
         self.assertIn('STAGE 1 — IDENTIFY', self.ui.text())
+
+    def assert_phase_order(self, expected_groups):
+        text = self.ui.main_text_without_expanders()
+        groups = re.split(r'THREAT \d+ — ', text)[1:]
+        self.assertEqual(len(groups), expected_groups)
+        for group in groups:
+            identify = 'IDENTIFY — Clarify the threat'
+            evaluate = 'EVALUATE — Assess its significance'
+            self.assertEqual(group.count(identify), 1)
+            self.assertEqual(group.count(evaluate), 1)
+            self.assertLess(group.index(identify), group.index(evaluate))
+        self.assertLessEqual(len(self.ui.app.radio), 1)
+
+    def restore_evaluation(self, case):
+        review_case(case)
+        self.ui.restore(import_progress(export_progress(
+            Assessment(scenario=case.scenario, case_state=case), ReviewState(), AddressState(), 'case_evaluate')))
+
+    def test_fully_clarified_organisational_interest_keeps_both_headings_without_questions(self):
+        case = start_case(SCENARIO)
+        run_interview(case, {'work_changed': 'No'})
+        self.restore_evaluation(case)
+        self.assert_phase_order(2)
+        self.assertFalse(self.ui.app.radio)
+        self.assertEqual(len(case.answers), 4)
+        self.assertNotIn('at an acceptable level', self.ui.text().lower())
+
+    def test_fully_clarified_personal_interest_shows_established_information(self):
+        self.restore_evaluation(source_case())
+        self.assert_phase_order(1)
+        self.assertFalse(self.ui.app.radio)
+        self.assertIn('already established in the recorded account', self.ui.text())
+
+    def test_fully_clarified_familiarity_keeps_both_headings_without_inventing_questions(self):
+        from tests.test_case_reasoning import case, fact, responsible
+        sample = case(responsible(), fact('friend', 'close_relationship', 'Current close friend', object_id='cfo'))
+        self.restore_evaluation(sample)
+        self.assert_phase_order(1)
+        self.assertFalse(self.ui.app.radio)
+        self.assertFalse(self.ui.case().answers)
+
+    def test_identify_complete_evaluate_pending_keeps_both_headings(self):
+        self.ui.begin(SCENARIO)
+        self.ui.confirm_account()
+        self.assert_phase_order(2)
+        self.assertEqual(plan_questions(self.ui.case()).questions[0].phase, 'evaluate')
+        self.assertEqual(len(self.ui.app.radio), 1)
+        self.assertIn('Current question: Self-interest · EVALUATE', self.ui.text())
+        self.assertIn('Relevant information already established in your account is reused', self.ui.text())
+        self.assertNotIn('interest_connection', {q.predicate for q in plan_questions(self.ui.case()).questions})
+
+    def test_both_phases_pending_show_headings_in_order_with_only_one_question(self):
+        sample = start_case(SCENARIO)
+        connection = next(f for f in sample.facts if f.predicate == 'interest_connection')
+        edit_case_fact(sample, connection.id, connection.value, 'withdrawn')
+        self.restore_evaluation(sample)
+        self.assert_phase_order(2)
+        first = plan_questions(self.ui.case()).questions[0]
+        self.assertEqual((first.predicate, first.phase), ('interest_connection', 'identify'))
+        self.assertEqual(self.ui.app.radio[0].label, first.prompt)
+        self.assertIn('A relevant clarification is pending', self.ui.text())
+
+    def test_heading_rendering_preserves_unknowns_and_source_state_across_reruns(self):
+        sample = start_case(SCENARIO)
+        run_interview(sample)
+        self.restore_evaluation(sample)
+        before = deepcopy(self.ui.case())
+        self.ui.app.run()
+        self.ui.healthy()
+        self.assert_phase_order(2)
+        self.assertEqual(before, self.ui.case())
+        self.assertFalse(self.ui.app.radio)
+        self.assertIn('Explicit Unknown answers and unresolved matters remain qualified', self.ui.text())
 
 
 if __name__ == '__main__':

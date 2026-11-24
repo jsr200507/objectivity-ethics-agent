@@ -160,20 +160,37 @@ def _material_question(case,snapshot,navigate,plan):
             st.warning('The seven-question limit has been reached. Material issues remain unresolved below; the limit does not mean that the threats have been fully assessed.')
         else:
             st.info('The recorded answers are ready for a preliminary evaluation. Explicit Unknown answers and other material uncertainties remain limitations.')
-        return
-    q=plan.questions[0]
-    current = next((t for t in snapshot.threats if t.id in q.threat_ids), None)
-    if current:
-        index = snapshot.threats.index(current) + 1
-        st.subheader(f'THREAT {index:02} — {current.kind.upper()}')
-        st.caption('THREAT IDENTIFIED · Source or beneficiary: ' + _actor(case,current.subject))
-        st.write(current.mechanism)
-        if q.phase == 'evaluate':
-            st.caption('IDENTIFY — The recorded circumstances are reused; unanswered or explicitly unknown facts remain qualified.')
-    else:
+    q = plan.questions[0] if plan.questions else None
+    current = next((t for t in snapshot.threats if q and t.id in q.threat_ids), None)
+    if q:
+        st.caption('Current question: ' + (current.kind + ' · ' if current else '') + q.phase.upper())
+    if q and current is None:
         st.subheader('Establish the professional decision')
-    title = 'STAGE 1 — IDENTIFY: Clarify the threat' if q.phase == 'identify' else 'STAGE 2 — EVALUATE: Assess its significance'
-    st.write('**' + title + '**')
+        _material_question_form(case, q, navigate)
+    for index, threat in enumerate(snapshot.threats, 1):
+        st.subheader(f'THREAT {index:02} — {threat.kind.upper()}')
+        st.caption('THREAT IDENTIFIED · Source or beneficiary: ' + _actor(case, threat.subject))
+        st.write(threat.mechanism)
+        gaps = preliminary_assessment(case, snapshot, threat, plan).gaps
+        for phase, title in (
+            ('identify', 'STAGE 1 — IDENTIFY — Clarify the threat'),
+            ('evaluate', 'STAGE 2 — EVALUATE — Assess its significance'),
+        ):
+            st.write('**' + title + '**')
+            if threat == current and q.phase == phase:
+                _material_question_form(case, q, navigate)
+            elif any(threat.id in item.threat_ids and item.phase == phase for item in plan.deferred):
+                st.caption('The question limit leaves information unresolved for this phase; see the preliminary reasoning.')
+            elif any(threat.id in item.threat_ids and item.phase == phase for item in plan.questions):
+                st.caption('A relevant clarification is pending and will be asked in sequence; the assessment remains provisional.')
+            elif gaps:
+                st.caption('Relevant information already established in your account is reused; no further question is selected for this phase. Explicit Unknown answers and unresolved matters remain qualified below.')
+            else:
+                st.caption('The relevant information is already established in the recorded account; no further clarification is currently needed for this phase. This is not independent verification.')
+
+
+def _material_question_form(case, q, navigate):
+    """Render only the planner's single active question, without adding questions."""
     with st.form(_key('material_question')):
         if q.options:
             choice=st.radio(q.prompt,q.options,index=None,key=_key('material_choice'))
