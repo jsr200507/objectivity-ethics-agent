@@ -25,7 +25,7 @@ _ORG = re.compile(rf"\b{_NAME}\s+(?:Valuations?|Valuers?|Surveyors?|Advisory|Sup
 _GENERIC_ORG = re.compile(r"\b(?:external\s+valuation\s+firm|independent\s+valuation\s+firm|valuation\s+firm|manufacturing\s+company|listed\s+client|our\s+firm|your\s+firm|my\s+firm|the\s+firm|our\s+company|your\s+company|my\s+company|the\s+company)\b", re.I)
 _EMPLOYMENT = re.compile(rf"(?i:\b(?:my|your|our)\s+(?P<relation>{_FAMILY})\b[^.!?;]{{0,55}}\b(?:works?\s+(?:for|at|in)|is\s+employed\s+by|is\s+employed\s+at|is\s+an?\s+employee\s+of)\s+)(?P<org>{_NAME}|(?i:(?:an?\s+|the\s+)?(?:external\s+|independent\s+)?valuation\s+firm))\b")
 _BENEFITS = re.compile(r"\b(?:bonus(?:es)?|commissions?|consulting\s+fee|advisory\s+fee|contingent\s+fee|success\s+fee|retainer|shareholdings?|shares?|equity|stock\s+options?|financial\s+(?:benefit|incentive)|cash\s+reward|pay\s+rise|salary\s+increase)\b", re.I)
-_LINK = re.compile(r"\b(?:depend(?:s|ent)?|tied|linked|conditional|contingent|in\s+return|provided\s+that|only\s+if|on\s+each\s+(?:sale|approval)|based\s+on)\b", re.I)
+_LINK = re.compile(r"\b(?:depend(?:s|ent)?|tied|linked|affect(?:s|ed|ing)?|conditional|contingent|in\s+return|provided\s+that|only\s+if|on\s+each\s+(?:sale|approval)|based\s+on)\b", re.I)
 _FIRM_INCENTIVE = re.compile(r"\b(?:contract\s+renewal|client\s+retention|retain\s+(?:the\s+)?client|profit\s+targets?|firm[’']?s?\s+fees?|firm\b[^.!?;]{0,45}\b(?:earns?|receives?)\s+(?:a\s+)?(?:fee|income|retainer))\b", re.I)
 _CAREER = re.compile(r'\b(?:promotion|career\s+advancement|job\s+security|continued\s+employment)\b', re.I)
 _ORG_FINANCE = re.compile(r'\b(?:refinancing|financing|borrowing|(?:loan|debt|lending)\s+covenants?|credit\s+(?:facility|line)|funding\s+(?:renewal|agreement|conditions)|capital\s+raise)\b', re.I)
@@ -311,7 +311,7 @@ class LocalUnderstandingProvider:
                 if owner:
                     value = 'Organisational financing or loan covenant interest'
                     fact(owner,'interest',value,unit,owner,attribution=actors[owner].label)
-                    connection = _connection_value(unit[finance.start():])
+                    connection = _connection_value(unit)
                     if connection:
                         fact(owner,'interest_connection',connection,unit,owner,status='unknown' if connection=='Unknown' else 'reported')
             commercial=_FIRM_INCENTIVE.search(unit)
@@ -332,12 +332,15 @@ class LocalUnderstandingProvider:
                 fact(speaker,'pressure',unit.rstrip('.!?'),unit,'user',attribution=actors[speaker].label)
             # A statement about a future valuation is a reported claim, never a prediction/fact of recovery.
             future_claim = re.search(r'\b(?:says?|said|claims?|claimed|believes?)\b',unit,re.I) and re.search(r'\b(?:may|might|could|will)\b[^.!?;]{0,65}\b(?:recover|improve|rise|increase)\b',unit,re.I)
-            technical_verb = re.search(r'\b(?:says?|said|claims?|claimed|states?|stated|explains?|explained|maintains?|maintained|assumes?|assumed|forecasts?|projects?|believes?)\b',unit,re.I)
+            technical_verb = re.search(r'\b(?:says?|said|claims?|claimed|states?|stated|explains?|explained|maintains?|maintained|assumes?|assumed|forecasts?|projects?|believes?|estim\w*|notic\w*|observ\w*|identif\w*|found)\b',unit,re.I)
             technical_claim = technical_verb and not _negated(unit, technical_verb.start()) and re.search(r'\b(?:assumptions?|growth|discount\s+rate|yield|forecast|returns?|value|estimate|recovery)\b',unit,re.I)
             if future_claim or technical_claim:
                 named = [key for _,key in mentions(unit)]
-                speaker=personal_mentions[0] if personal_mentions else named[0] if named else 'user' if re.match(r'\s*(?:I|you|we)\b', unit, re.I) else actor('Reported claimant',kind='unknown')
+                speaker=personal_mentions[0] if personal_mentions else named[0] if named else 'user' if re.search(r'\b(?:I|you|we)\s+(?:have\s+)?(?:estimated|noticed|observed|identified|found|assumed|forecast|projected|believe|consider)\b', unit, re.I) or re.match(r'\s*(?:I|you|we)\b', unit, re.I) else actor('Reported claimant',kind='unknown')
                 fact(speaker,'claim',unit.rstrip('.!?'),unit,attribution=speaker)
+            evidence_gap = re.search(r'\b(?:not\s+yet|have\s+not|haven[’\']t|insufficient|lack\s+of|no)\b[^.!?;]{0,100}\b(?:supporting\s+evidence|evidence|documentation|records|support)\b', unit, re.I)
+            if evidence_gap and re.search(r'\b(?:I|you|we)\b', unit, re.I):
+                fact('user','claim',unit.rstrip('.!?'),unit,attribution='You')
             # Self-review and advocacy require their own supported mechanisms, not an audit-role keyword.
             selfreview=re.search(r'\b(?:review(?:ing)?|audit(?:ing)?|assess(?:ing)?)\b[^.!?;]{0,75}\b(?:my\s+own|our\s+own|your\s+own|I\s+(?:previously\s+)?prepared|you\s+(?:previously\s+)?prepared)\b|\b(?:I|you)\s+(?:prepared|developed|calculated)\b[^.!?]{0,120}\b(?:now|then)\b[^.!?]{0,55}\b(?:review|audit|assess)\s+(?:it|the\s+same|that|this)\b',unit,re.I)
             if selfreview and not _negated(unit,selfreview.start()):fact('user','self_review','Reviewing or relying on own earlier work',unit)
@@ -346,7 +349,7 @@ class LocalUnderstandingProvider:
             # Explicit structured equivalents can be reused instead of being asked again.
             if re.search(r'\b(?:I|you|we)\s+(?:make|recommend|approve|select|decide)\b|\b(?:I|you)\s+(?:am|are)\s+responsible\s+for\s+(?:approv|decid|select)',unit,re.I):
                 fact('user','decision_responsibility','I make or recommend the decision',unit)
-            elif re.search(r'\b(?:I|you|we)\s+(?:review|supervise|am\s+reviewing|are\s+reviewing)\b|\byou\s+are\s+[^.!?]{0,55}\breviewing\b',unit,re.I):
+            elif re.search(r'\b(?:I|you|we)\s+(?:review|supervise|am\s+reviewing|are\s+reviewing)\b|\byou\s+are\s+[^.!?]{0,55}\breviewing\b|\b(?:I|you|we)\s+(?:am|are)\s+responsible\s+for\s+(?:review\w*|supervis\w*|oversee\w*|check\w*|examin\w*|assess\w*|evaluat\w*|audit\w*)',unit,re.I):
                 fact('user','decision_responsibility','I supervise or review the work',unit)
             elif re.search(r'\b(?:I|you|we)\s+(?:compare|prepare|assess|evaluate)\b|\b(?:I\s+am|you\s+are|we\s+are)\s+[^.!?;]{0,80}\b(?:preparing|assessing|evaluating|comparing)\b',unit,re.I):
                 if not re.search(r'\b(?:not|never|do\s+not|do[ne][’\']t)\b', unit, re.I):

@@ -289,4 +289,30 @@ class UnderstandingTests(unittest.TestCase):
         with self.assertRaises(TypeError):LocalUnderstandingProvider().understand(None)
 
 
+    def test_property_valuation_preserves_amount_assumptions_responsibility_and_uncertain_link(self):
+        scenario = (
+            "I am a senior financial analyst reviewing an external valuation of a commercial building before the year-end financial statements are finalised. "
+            "The external valuation firm has estimated the property's fair value at £12 million. "
+            "However, I noticed that the valuation relies on rental growth assumptions that appear higher than recent market trends. "
+            "The investment director has asked me to accept the valuation without further investigation because a lower valuation could affect the company's loan covenant. "
+            "I have not yet obtained sufficient supporting evidence to confirm whether the assumptions are reasonable. "
+            "I am responsible for reviewing the valuation and reporting my findings to my manager. "
+            "I want to understand whether my professional objectivity could be threatened and what actions I should take."
+        )
+        result = self.understand(scenario)
+        responsibility = self.facts(result, 'decision_responsibility')
+        self.assertTrue(any(f.value == 'I supervise or review the work' for f in responsibility))
+        company_interest = next(f for f in self.facts(result, 'interest')
+                                if f.value == 'Organisational financing or loan covenant interest')
+        self.assertEqual(company_interest.subject, 'company')
+        connection = next(f for f in self.facts(result, 'interest_connection')
+                          if f.subject == 'company')
+        self.assertEqual(connection.value, 'Unknown')
+        self.assertEqual(connection.status, 'unknown')
+        claims = self.facts(result, 'claim')
+        self.assertTrue(any(f.subject == 'valuation_firm' and '£12 million' in f.value for f in claims))
+        self.assertTrue(any(f.subject == 'user' and 'rental growth assumptions' in f.value for f in claims))
+        self.assertTrue(any(f.subject == 'user' and 'sufficient supporting evidence' in f.value for f in claims))
+
+
 if __name__=='__main__':unittest.main()
