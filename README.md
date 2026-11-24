@@ -82,9 +82,10 @@ Threats → Step 3: Address Threats → Final Ethical Assessment Report**
 3. In **Step 2: Identify & Evaluate Threats**, the active material question is the
    main interaction. Questions are grouped by their specific threat and source:
    **IDENTIFY — Clarify the threat**, then **EVALUATE — Assess its significance**,
-   before moving to the next threat. Each explains **Why this question?**
-   and how the answer could affect the evaluation. Select **Record answer and
-   reassess** to update the findings. Known facts are reused; an explicit
+   before moving to the next threat. Only one question is active, with its
+   current stage, **Why we are asking**, and how the answer may change the
+   assessment. Select **Record answer and continue** to record the choice and
+   optional explanation, then recalculate the next question. Known facts are reused; an explicit
    **Unknown** remains a limitation and is not repeatedly asked. Where no material
    clarification is needed, the app explains the evaluation without inventing a
    question. There is no minimum and at most seven distinct clarification questions
@@ -98,9 +99,14 @@ Threats → Step 3: Address Threats → Final Ethical Assessment Report**
    or in the report's preliminary evaluation and third-party sections.
    Use **Review scenario summary** to revisit the account. Material corrections
    return to Step 1 for confirmation and recalculate dependent findings.
-5. Select **Review existing actions** to open **Step 3: Address Threats**:
-   “What steps, if any, have you already taken to address these concerns?” Actions
-   recognised in the scenario are prefilled for review. Describe an action and
+5. Select **Review existing actions** to open **Step 3: Address Threats**.
+   Each threat has a separate card with a primary safeguard, case-specific
+   considerations, an alternative, and supporting actions and evidence.
+   Recommendations use structured data shared with section H of the report;
+   they are not records of implemented safeguards. Existing conditions or
+   supported actions that already address a threat do not force a new measure.
+   Under **Existing or planned actions**, actions recognised in the scenario
+   are prefilled for review. Use **Add or edit an action record** to describe an action and
    explicitly choose its type, status and threat coverage rather than repeating
    facts already recorded. **No relevant action has been taken** and **Existing
    actions are not known** are available where relevant.

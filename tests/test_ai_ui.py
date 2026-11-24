@@ -226,7 +226,7 @@ class OptionalAIAppTests(unittest.TestCase):
                 break
             question = questions[0]
             self.widget('radio', question.prompt).set_value('Unknown')
-            self.click('Record answer and reassess')
+            self.click('Record answer and continue')
             self.app.run()
             self.healthy()
         else:

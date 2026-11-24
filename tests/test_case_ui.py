@@ -266,6 +266,58 @@ class ScenarioCaseAppTests(unittest.TestCase):
         self.assertLess(text.index('Recommended safeguards'), text.index('Existing or planned actions'))
         self.assertNotIn('What steps, if any, have you already taken', text)
 
+    def test_structured_safeguard_cards_and_report_share_the_same_fields(self):
+        from objectivity.case_actions import assess_actions
+        from objectivity.case_report import _escaped
+        from tests.test_authority_provider_context import SCENARIO
+        self.begin(SCENARIO)
+        self.to_actions()
+        before = deepcopy(self.case())
+        with patch('objectivity.case_actions._format_recommendation', return_value='Opaque legacy projection'):
+            self.app.run(); self.healthy()
+            result = assess_actions(self.case())
+            text = self.main_text_without_expanders()
+            self.assertEqual(text.count('Primary safeguard'), len(result.recommendations))
+            self.assertEqual(text.count('Case-specific considerations'), len(result.recommendations))
+            for recommendation in result.recommendations:
+                for detail in (recommendation.primary, *recommendation.considerations,
+                               recommendation.alternative, recommendation.supporting):
+                    self.assertIn(detail, text)
+            self.assertNotIn('Opaque legacy projection', text)
+            self.assertFalse(self.case().actions)
+            self.click('Generate Objectivity report')
+            report = next(item.value for item in self.app.markdown if item.value.startswith('# Objectivity Ethical Assessment Report'))
+            section = report.split('## H. Prioritised next steps')[1].split('## I.')[0]
+            for recommendation in result.recommendations:
+                for detail in (recommendation.primary, *recommendation.considerations,
+                               recommendation.alternative, recommendation.supporting):
+                    self.assertIn(_escaped(detail), section)
+            self.assertNotIn('Opaque legacy projection', section)
+            self.assertNotIn('**Recorded stage:** Implemented', report)
+        self.assertEqual(self.case(), before)
+
+    def test_same_category_sources_have_separate_structured_cards(self):
+        from objectivity.address import AddressState
+        from objectivity.case_actions import assess_actions
+        from objectivity.case_workflow import review_case
+        from objectivity.models import Assessment
+        from objectivity.review import ReviewState
+        from tests.test_case_actions import source_case, fact
+        sample = source_case(fact('fee', 'interest', 'Consulting fee', subject='cfo'),
+                             fact('fee-link', 'interest_connection', 'Yes', subject='cfo'))
+        review_case(sample)
+        self.restore(import_progress(export_progress(Assessment(scenario=sample.scenario, case_state=sample),
+            ReviewState(), AddressState(), 'case_address')))
+        result = assess_actions(self.case())
+        self.assertEqual(len(result.recommendations), 2)
+        self.assertEqual(len({r.threat_id for r in result.recommendations}), 2)
+        text = self.main_text_without_expanders()
+        self.assertIn('01 · Self-interest', text)
+        self.assertIn('02 · Self-interest', text)
+        for recommendation in result.recommendations:
+            self.assertIn(recommendation.primary, text)
+        self.assertFalse(self.case().actions)
+
     def test_recorded_unknown_participation_does_not_trigger_an_artificial_question(self):
         self.begin(PROPERTY_EMPLOYMENT)
         self.confirm_account()

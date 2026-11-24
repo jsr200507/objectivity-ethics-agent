@@ -294,6 +294,63 @@ class CaseRecommendationTests(unittest.TestCase):
         self.assertNotIn('**Recorded stage:** Implemented', report)
         self.assertEqual(sample, before)
 
+    def test_typed_recommendations_and_procedural_follow_ups_are_separate(self):
+        sample = property_case()
+        before = deepcopy(sample)
+        result = assess_actions(sample)
+        self.assertEqual({r.threat_id for r in result.recommendations},
+                         {t.id for t in reason_case(sample).threats})
+        self.assertEqual(len(result.recommendations), 2)
+        for recommendation in result.recommendations:
+            self.assertTrue(recommendation.primary and recommendation.alternative and recommendation.supporting)
+            self.assertTrue(recommendation.considerations)
+        self.assertTrue(result.follow_up_steps)
+        self.assertIn('Establish what has already been done', result.follow_up_steps[0])
+        self.assertEqual(sample, before)
+        self.assertFalse(sample.actions)
+
+    def test_report_does_not_classify_compatibility_recommendation_strings(self):
+        sample = property_case()
+        with patch('objectivity.case_actions._format_recommendation', return_value='Opaque compatibility output'):
+            report = build_case_report(sample)
+        section = report.split('## H. Prioritised next steps')[1].split('## I.')[0]
+        self.assertNotIn('Opaque compatibility output', section)
+        self.assertEqual(section.count('**Primary:**'), 2)
+        self.assertIn('Establish what has already been done', section)
+
+    def test_report_renders_typed_recommendations_without_legacy_next_steps(self):
+        sample = property_case()
+        result = assess_actions(sample)
+        with patch('objectivity.case_report.assess_actions', return_value=replace(result, next_steps=())):
+            report = build_case_report(sample)
+        section = report.split('## H. Prioritised next steps')[1].split('## I.')[0]
+        self.assertEqual(section.count('**Primary:**'), len(result.recommendations))
+        self.assertIn('Establish what has already been done', section)
+
+    def test_primary_label_in_user_context_cannot_hide_a_non_safeguard_follow_up(self):
+        sample = source_case(fact('pressure', 'pressure', 'Requested a favourable judgment',
+                                  subject='cfo', object_id='user'),
+                             fact('changed', 'work_changed', 'No', object_id='cfo'))
+        edit_case_fact(sample, 'decision', 'Review the Primary: inventory estimate')
+        edit_case_fact(sample, 'connection', 'No')
+        review_case(sample)
+        result = assess_actions(sample)
+        self.assertTrue(result.recommendations)
+        self.assertTrue(any('Primary: ' in step for step in result.follow_up_steps))
+        section = build_case_report(sample).split('## H. Prioritised next steps')[1].split('## I.')[0]
+        self.assertIn('retain the recorded conditions supporting acceptability', section)
+        self.assertIn('Primary:', section)
+
+    def test_missing_extra_context_has_a_source_specific_qualified_consideration(self):
+        sample = source_case()
+        sample.facts = [f for f in sample.facts if f.predicate != 'role']
+        before = deepcopy(sample)
+        recommendation = assess_actions(sample).recommendations[0]
+        self.assertFalse(recommendation.remit or recommendation.context)
+        self.assertIn('Assess the inventory write-down', recommendation.considerations[0])
+        self.assertIn('further material facts may change', recommendation.considerations[0])
+        self.assertEqual(sample, before)
+
 
 if __name__ == '__main__':
     unittest.main()

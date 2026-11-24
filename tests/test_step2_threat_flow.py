@@ -705,6 +705,71 @@ class Step2StreamlitTests(unittest.TestCase):
         self.assertFalse(self.ui.app.radio)
         self.assertIn('Explicit Unknown answers and unresolved matters remain qualified', self.ui.text())
 
+    def test_interactive_unknown_and_explanation_are_preserved_across_phase_changes(self):
+        sample = start_case(SCENARIO)
+        connection = next(f for f in sample.facts if f.predicate == 'interest_connection')
+        edit_case_fact(sample, connection.id, connection.value, 'withdrawn')
+        self.restore_evaluation(sample)
+        first = plan_questions(self.ui.case()).questions[0]
+        self.assertEqual(first.phase, 'identify')
+        self.ui.answer_material('Yes', 'This link is my reported understanding of the agreement.')
+        self.assertEqual(plan_questions(self.ui.case()).questions[0].phase, 'evaluate')
+        current = plan_questions(self.ui.case()).questions[0]
+        explanation = 'The covenant terms have not been checked; authority is not established.'
+        self.ui.answer_material('Unknown', explanation)
+        answer = self.ui.case().answers[current.id]
+        self.assertEqual((answer.choice, answer.explanation), ('Unknown', explanation))
+        self.assertEqual(next(f.status for f in self.ui.case().facts if f.id == answer.fact_id), 'unknown')
+        next_question = plan_questions(self.ui.case()).questions[0]
+        self.assertEqual((next_question.predicate, next_question.phase), ('pressure_authority', 'identify'))
+        self.assertEqual(self.ui.app.radio[0].label, next_question.prompt)
+        self.assertEqual(len(self.ui.app.radio), 1)
+        self.ui.restore(self.ui.round_trip())
+        self.assertEqual(self.ui.case().answers[current.id].explanation, explanation)
+        self.assertEqual(self.ui.app.radio[0].label, next_question.prompt)
+        self.assertIsNone(self.ui.app.radio[0].value)
+
+    def test_unanswered_question_does_not_advance_or_invent_unknown(self):
+        self.ui.begin(SCENARIO)
+        self.ui.confirm_account()
+        current = plan_questions(self.ui.case()).questions[0]
+        before = deepcopy(self.ui.case())
+        self.ui.click('Record answer and continue')
+        self.assertEqual(before, self.ui.case())
+        self.assertEqual(self.ui.app.radio[0].label, current.prompt)
+        self.assertTrue(self.ui.app.warning)
+
+    def test_free_text_decision_unknown_keeps_identify_stage_and_explanation(self):
+        self.ui.begin('I need help with a professional issue.')
+        self.ui.confirm_account()
+        current = plan_questions(self.ui.case()).questions[0]
+        self.assertEqual((current.predicate, current.options), ('decision', ()))
+        self.assertIn('STAGE 1 — IDENTIFY', self.ui.main_text_without_expanders())
+        self.ui.widget('text_area', 'Additional explanation (optional)').input('The assignment has not been defined.')
+        self.ui.click('I do not know')
+        answer = self.ui.case().answers[current.id]
+        self.assertEqual((answer.choice, answer.explanation), ('Unknown', 'The assignment has not been defined.'))
+        self.assertFalse(plan_questions(self.ui.case()).questions)
+
+    def test_imported_older_budget_can_reopen_an_existing_slot_without_hiding_it(self):
+        sample = crowded_case()
+        seen = run_interview(sample)
+        sample.fact_history.append(CaseFact('answer-old-extra', 'user', 'context',
+                                           'Earlier imported answer', source='user', reviewed=True))
+        source = next(f for f in sample.facts if f.id in seen[0].depends_on and f.predicate == 'interest')
+        edit_case_fact(sample, source.id, 'Revised contingent fee')
+        self.restore_evaluation(sample)
+        plan = plan_questions(self.ui.case())
+        self.assertEqual(plan.answered_count, 8)
+        self.assertEqual(plan.questions[0].id, seen[0].id)
+        self.assertEqual(len(self.ui.app.radio), 1)
+        self.assertEqual(self.ui.app.radio[0].label, plan.questions[0].prompt)
+        self.assertIn('8 answers retained from earlier progress', self.ui.text())
+        self.ui.answer_material('Unknown', 'Still not established after correcting the source.')
+        self.assertEqual(plan_questions(self.ui.case()).answered_count, 8)
+        self.assertFalse(plan_questions(self.ui.case()).questions)
+        self.assertTrue(plan_questions(self.ui.case()).deferred)
+
 
 if __name__ == '__main__':
     unittest.main()

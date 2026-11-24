@@ -102,6 +102,13 @@ class SafeguardRecommendation:
     alternative: str
     supporting: str
 
+    @property
+    def considerations(self) -> tuple[str, ...]:
+        """Shared case context for the card and report, without parsing prose."""
+        return tuple(detail for detail in (self.remit, self.context) if detail) or (
+            f"This recommendation concerns {self.target}; further material facts may change the appropriate response.",
+        )
+
 
 @dataclass(frozen=True)
 class ActionAssessment:
@@ -112,6 +119,7 @@ class ActionAssessment:
     next_steps: tuple[str, ...]
     unknowns: tuple[str, ...]
     recommendations: tuple[SafeguardRecommendation, ...] = ()
+    follow_up_steps: tuple[str, ...] = ()
 
 
 def _unique(values):
@@ -450,12 +458,19 @@ def assess_actions(case: CaseState, snapshot: ReasoningSnapshot | None = None) -
     """Recompute action effectiveness and residuals without trusting assertions."""
     snapshot = _reason(case, snapshot)
     action_results = tuple(_action_evaluation(case, action, snapshot) for action in case.actions)
-    outcomes, steps, all_gaps, recommendations = [], [], [], []
+    outcomes, steps, all_gaps, recommendations, follow_up_steps = [], [], [], [], []
+
+    def add_follow_up(text):
+        # Preserve the legacy combined projection without asking consumers to
+        # distinguish recommendations by searching user-authored text.
+        follow_up_steps.append(text)
+        steps.append(text)
+
     evaluations = {evaluation.threat_id: evaluation for evaluation in snapshot.evaluations}
     needs_action_history = any(not _acceptable_conditions(case, evaluations.get(threat.id)) for threat in snapshot.threats)
     if not case.actions_reviewed and needs_action_history:
         all_gaps.append("Existing actions have not yet been reviewed; their absence from the account is not evidence that none were taken.")
-        steps.append("Establish what has already been done or planned, by whom and for which recorded sources of influence, before choosing additional responses.")
+        add_follow_up("Establish what has already been done or planned, by whom and for which recorded sources of influence, before choosing additional responses.")
     for threat in snapshot.threats:
         evaluation = evaluations.get(threat.id)
         linked = [action for action in action_results if threat.id in action.covered_threats]
@@ -471,7 +486,7 @@ def assess_actions(case: CaseState, snapshot: ReasoningSnapshot | None = None) -
             if linked:
                 reasons.append("The status and effectiveness of any recorded optional action remain distinct from the existing circumstances supporting this finding.")
             third_party = evaluation.third_party
-            steps.append(f"For {_target(case, threat)}, retain the recorded conditions supporting acceptability and reassess if the decision link or circumstances change; no additional safeguard is currently indicated.")
+            add_follow_up(f"For {_target(case, threat)}, retain the recorded conditions supporting acceptability and reassess if the decision link or circumstances change; no additional safeguard is currently indicated.")
         elif effective and not persistent:
             status = SUPPORTED
             descriptions = "; ".join(action.description for action in effective)
@@ -513,7 +528,7 @@ def assess_actions(case: CaseState, snapshot: ReasoningSnapshot | None = None) -
         conclusion = "No potential threat is established from the available structured account within these rules. This is not assurance that threats are absent or that Objectivity is protected."
         if snapshot.questions:
             all_gaps.append("Material professional context remains to be clarified.")
-            steps.append("Clarify the material professional decision and circumstances selected by the current question, or retain the limitation explicitly.")
+            add_follow_up("Clarify the material professional decision and circumstances selected by the current question, or retain the limitation explicitly.")
     elif all(outcome.status in {SUPPORTED, ACCEPTABLE} for outcome in outcomes) and not all_gaps:
         if all(outcome.status == ACCEPTABLE for outcome in outcomes):
             conclusion = "The recorded circumstances conditionally support that the considered Objectivity threats are at an acceptable level. No additional safeguards are indicated on this account. Reassess if material facts change; this is not independent verification, automatic compliance or a certified ethical opinion."
@@ -524,4 +539,4 @@ def assess_actions(case: CaseState, snapshot: ReasoningSnapshot | None = None) -
     else:
         conclusion = "The available evidence does not yet establish that all identified Objectivity threats are at an acceptable level. Resolve the remaining material uncertainties and incomplete responses before relying on a positive conclusion."
     third_party = " ".join(outcome.third_party for outcome in outcomes) if outcomes else "There is not enough case-specific evidence for this application to provide assurance of Objectivity through the reasonable and informed third party test."
-    return ActionAssessment(tuple(outcomes), action_results, conclusion, third_party, _unique(steps), _unique(all_gaps), tuple(recommendations))
+    return ActionAssessment(tuple(outcomes), action_results, conclusion, third_party, _unique(steps), _unique(all_gaps), tuple(recommendations), _unique(follow_up_steps))

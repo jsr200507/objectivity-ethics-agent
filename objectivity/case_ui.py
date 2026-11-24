@@ -161,12 +161,14 @@ def _material_question(case,snapshot,navigate,plan):
     elif q:
         question_number = min(plan.answered_count + 1, MAX_STEP2_QUESTIONS)
         st.caption(f'QUESTION {question_number} OF {MAX_STEP2_QUESTIONS} · One question at a time')
+
+    if q:
         if current:
             st.caption('THREAT IDENTIFIED · ' + current.kind.upper() + ' · Source or beneficiary: ' + _actor(case, current.subject))
-            st.markdown('**STAGE ' + ('1 — IDENTIFY' if q.phase == 'identify' else '2 — EVALUATE') + '**')
             st.caption('Current question: ' + current.kind + ' · ' + q.phase.upper())
         else:
             st.markdown('**CLARIFY THE PROFESSIONAL DECISION**')
+        st.markdown('**STAGE ' + ('1 — IDENTIFY' if q.phase == 'identify' else '2 — EVALUATE') + '**')
 
         with st.container(border=True):
             with st.form(_key('material_question')):
@@ -327,10 +329,9 @@ def _address(case,snapshot,navigate):
                     if recommendation:
                         st.markdown('**Primary safeguard**')
                         st.write(recommendation.primary)
-                        if recommendation.remit:
-                            st.caption(recommendation.remit)
-                        if recommendation.context:
-                            st.caption('Case-specific consideration: ' + recommendation.context)
+                        st.markdown('**Case-specific considerations**')
+                        for detail in recommendation.considerations:
+                            st.write(detail)
                         st.markdown('**Alternative if the primary response is unavailable**')
                         st.write(recommendation.alternative)
                         st.markdown('**Supporting actions and evidence**')

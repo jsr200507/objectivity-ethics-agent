@@ -279,21 +279,23 @@ def build_case_report(case: CaseState) -> str:
     if not snapshot.threats:
         lines += ["Residual protection cannot be inferred merely from the absence of a supported threat finding.", ""]
     lines += ["## H. Prioritised next steps", ""]
-    steps = tuple(dict.fromkeys(step for step in addressed.next_steps if step))
-    if steps:
+    recommendations = getattr(addressed, "recommendations", ())
+    # Old assessment integrations may expose only next_steps. New assessments
+    # supply typed follow-ups alongside typed recommendations; neither path
+    # classifies user text by labels such as "Primary:".
+    follow_ups = (getattr(addressed, "follow_up_steps", ()) if recommendations
+                  else addressed.next_steps)
+    follow_ups = tuple(dict.fromkeys(step for step in follow_ups if step))
+    if recommendations or follow_ups:
         # Structured recommendations come first; unresolved action-history
         # checks remain visible after the measures, not as the opening advice.
-        for number, recommendation in enumerate(addressed.recommendations, 1):
+        for number, recommendation in enumerate(recommendations, 1):
             lines += [f"### {number}. {_escaped(recommendation.target)}", ""]
-            if recommendation.remit:
-                lines += [f"**Role and authority context:** {_escaped(recommendation.remit)}", ""]
-            lines += [f"**Primary:** {_escaped(recommendation.primary)}", ""]
-            if recommendation.context:
-                lines += [f"**Case-specific context:** {_escaped(recommendation.context)}", ""]
+            lines += [f"**Primary:** {_escaped(recommendation.primary)}", "",
+                      "**Case-specific considerations:**", "", *_paragraphs(recommendation.considerations), ""]
             lines += [f"**Alternative:** {_escaped(recommendation.alternative)}", "",
                       f"**Supporting evidence:** {_escaped(recommendation.supporting)}", ""]
-        other_steps = [step for step in steps if "Primary: " not in step]
-        for number, step in enumerate(other_steps, len(addressed.recommendations) + 1):
+        for number, step in enumerate(follow_ups, len(recommendations) + 1):
             lines += [f"{number}. {_escaped(step)}", ""]
     else:
         lines += ["Maintain the recorded protections, reconsider the assessment when material circumstances change, and resolve any limitations before relying on a professional conclusion.", ""]
