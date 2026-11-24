@@ -17,7 +17,7 @@ from objectivity.examples import EXAMPLE_SCENARIO
 from objectivity.extraction import extract_context
 from objectivity.models import DEFAULT_BASIS, Assessment, Context
 from objectivity.progress import export_progress, import_progress
-from objectivity.questions import next_question
+from objectivity.questions import QUESTION_BANK, next_question
 from objectivity.review import ReviewState
 
 
@@ -136,7 +136,9 @@ class GeneralPrefillAppTests(unittest.TestCase):
         self.assertEqual(assessment.context.basis, DEFAULT_BASIS)
         self.assertEqual(evaluate(assessment).findings, ())
         self.assertIsNone(next_question(assessment))
-        self.assertEqual(len(self.app.radio), 0)
+        phase_one_prompts = {question.prompt for question in QUESTION_BANK.values()}
+        self.assertTrue(all(radio.label not in phase_one_prompts for radio in self.app.radio))
+        self.assertEqual(self.app.session_state["view"], "context")
 
     def test_cfo_pasted_scenario_suggests_all_six_fields_with_literal_sources(self):
         self.begin(EXAMPLE_SCENARIO)

@@ -3,7 +3,13 @@
 import streamlit as st
 
 from objectivity.examples import EXAMPLE_SCENARIO
+from objectivity.case_workflow import start_case, migrate_legacy_assessment
+from objectivity.case_ui import render_case
+from objectivity.ai_ui import understanding_choice, start_assisted_case
+from objectivity.ai_diagnostic import render_operator_diagnostic
 from objectivity.extraction import extract_context
+from objectivity.intake_ui import render_intake
+from objectivity.intake import sync_intake
 from objectivity.context_suggestions import SUGGESTED_FIELDS, apply_suggestions
 from objectivity.address import AddressState, sync_address
 from objectivity.address_ui import render_address, render_report
@@ -50,29 +56,45 @@ def _key(name: str) -> str:
 
 
 def _scenario_view(assessment: Assessment) -> None:
-    st.caption("Step 1 of 6 · Describe your scenario")
+    st.caption("Scenario Input → Understand → Identify & Evaluate → Address → Report")
     st.subheader("What situation would you like to explore?")
     st.write(
-        "Describe the professional decision and the circumstances that concern you. "
-        "You will confirm the relevant details yourself in the next step."
+        "Describe the decision, the people involved and any actions already taken. "
+        "First review a concise summary, then explore the threats and any material gaps."
     )
-    if st.button("Load CFO / revenue recognition example"):
-        suggested = extract_context(EXAMPLE_SCENARIO).context
-        st.session_state.assessment = Assessment(
-            scenario=EXAMPLE_SCENARIO, context=suggested
-        )
-        st.session_state.example_loaded = True
-        _navigate("context")
+    if st.button("Try CFO example"):
+        st.session_state.assessment = Assessment(scenario=EXAMPLE_SCENARIO, case_state=start_case(EXAMPLE_SCENARIO))
+        _navigate("identify")
+    with st.expander("Previous guided example (optional)"):
+        if st.button("Load CFO / revenue recognition example"):
+            suggested = extract_context(EXAMPLE_SCENARIO).context
+            st.session_state.assessment = Assessment(scenario=EXAMPLE_SCENARIO, context=suggested)
+            st.session_state.example_loaded = True
+            _navigate("context")
+    render_operator_diagnostic()
     with st.form("scenario_entry"):
         scenario = st.text_area(
             "Your scenario", value=assessment.scenario, height=180,
-            placeholder="Describe your role, the decision and what happened…",
+            placeholder="Describe the professional work, relevant circumstances and what has happened…",
             key=_key("scenario"),
         )
-        submitted = st.form_submit_button("Continue to context confirmation")
-    if submitted:
+        consent = understanding_choice()
+        identify = st.form_submit_button("Review scenario")
+        with st.expander("Previous guided assessment (optional)"):
+            st.caption("Use the earlier context-confirmation workflow, including for saved assessments.")
+            submitted = st.form_submit_button("Continue to context confirmation")
+    if identify or submitted:
         if not scenario.strip():
             st.warning("Please enter a scenario before continuing.")
+        elif identify:
+            try:
+                case = start_assisted_case(scenario, consent=consent)
+            except ValueError as error:
+                st.warning(str(error))
+            else:
+                assessment.scenario = scenario.strip()
+                assessment.case_state = case
+                _navigate("identify")
         else:
             assessment.scenario = scenario.strip()
             assessment.context = extract_context(assessment.scenario).context
@@ -81,42 +103,42 @@ def _scenario_view(assessment: Assessment) -> None:
 
 
 def _context_view(assessment: Assessment) -> None:
+    sync_intake(assessment)
     st.caption("Step 2 of 6 · Confirm the context")
-    st.subheader("Check the details that will guide the questions")
-    if st.session_state.get("example_loaded"):
-        st.info(
-            "The example uses the same local extraction rules as any pasted scenario. "
-            "All of these details still need your confirmation."
-        )
-    if not assessment.confirmed:
-        st.info(
-            "Unconfirmed draft: initial suggestions use local, rule-based extraction, while saved "
-            "drafts retain their recorded values. "
-            "Missing or uncertain details are marked Unknown. These are suggestions, not verified "
-            "facts or confirmed information. Review, correct or replace every field before confirming."
-        )
-    else:
-        st.caption("Previously user-confirmed context — your values are retained while you edit them.")
+    st.subheader("Confirm what matters, one detail at a time")
     st.write(
-        "These fields are your account of the situation. No facts have been independently "
-        "verified. Only the fields you confirm and your structured answers guide the assessment. "
-        "Your corrections and restored progress are retained rather than replaced on reruns."
+        "Check the suggested account below. Local rules may miss details or misattribute them; "
+        "correct any suggestion and clarify only what is needed. Nothing is independently verified."
     )
     if not assessment.confirmed:
-        with st.expander("How were the suggestions obtained?"):
-            st.write(
-                "Local English rules recognise roles, parties, activities, relationships, incentives "
-                "and reported pressure, with supporting excerpts. They do not understand unrestricted narratives or infer ethical "
-                "findings. Saved draft fields may also contain your own edits."
-            )
-            matched = extract_context(assessment.scenario)
-            for field, label in SUGGESTED_FIELDS.items():
-                st.write(f"**{label} — matches in the saved scenario**")
-                sources = matched.evidence.get(field, ())
-                st.text("; ".join(sources) if sources else "Unknown — no sufficiently clear supported match.")
-            for limitation in matched.limitations:
-                st.caption(limitation)
-            st.caption("Every suggestion remains editable. A financial incentive or request is not itself a finding of bias or misconduct.")
+        st.caption("Unconfirmed draft · Suggestions and your clarifications need confirmation before assessment.")
+    else:
+        st.caption("User-confirmed account · Review or edit without repeating established details.")
+    # The complete editor remains an explicit alternative for direct corrections.
+    # It is optional: the default route uses the summary and focused questions.
+    opened = st.session_state.get("_open_context_details") == st.session_state.widget_generation
+    with st.expander("Edit all context details (optional)", expanded=opened):
+        st.caption(
+            "Use this alternative if you prefer to review every field together. Confirming here "
+            "also acknowledges any fields you explicitly leave Unknown."
+        )
+        _context_detailed_editor(assessment)
+    matched = extract_context(assessment.scenario)
+    with st.expander("How were the suggestions obtained?"):
+        st.write(
+            "Local English rules suggest details from your reported scenario; they do not "
+            "understand every narrative or verify any claim. Saved values may include your edits."
+        )
+        for field, label in SUGGESTED_FIELDS.items():
+            st.write(f"**{label} — matches in the saved scenario**")
+            excerpts = matched.evidence.get(field, ())
+            st.text("; ".join(excerpts) if excerpts else "No reliable extraction — clarify this detail if relevant.")
+        for limitation in matched.limitations:
+            st.caption(limitation)
+    render_intake(assessment, _navigate, matched)
+
+
+def _context_detailed_editor(assessment: Assessment) -> None:
     context = assessment.context
     with st.form("context_confirmation"):
         scenario = st.text_area(
@@ -453,11 +475,11 @@ def render_app() -> None:
         "principle of Objectivity and supports, rather than replaces, professional judgment."
     )
     st.caption(
-        "Rule-based guidance · No generative AI · No independent fact verification"
+        "Rule-based ethical evaluation · Optional AI assistance with consent · No independent fact verification"
     )
     with st.sidebar:
         st.subheader("Your session")
-        st.write("Describe → Confirm → Clarify → Evaluate → Address → Report")
+        st.write("Scenario → Understand → Identify & Evaluate → Address → Report")
         waiting_for_resume = render_save_resume()
     if waiting_for_resume:
         if "_progress_intent" in st.session_state:
@@ -465,6 +487,15 @@ def render_app() -> None:
         else:
             st.info("Choose Resume previous assessment or Start new assessment in Save & Resume. The saved copy has not been overwritten.")
         return
+    if st.session_state.view in {"identify", "case_evaluate", "case_address", "case_report"}:
+        render_case(assessment, _navigate)
+        return
+    if st.session_state.view != "scenario" and assessment.scenario.strip():
+        with st.expander("Reassess this saved case with the scenario-driven workflow"):
+            st.caption("Your previous answers and history stay available. Ambiguous coverage is reviewed rather than assumed.")
+            if st.button("Reassess saved case"):
+                assessment.case_state = migrate_legacy_assessment(assessment, st.session_state.review_state, st.session_state.address_state)
+                _navigate("identify")
     if st.session_state.view == "scenario":
         _scenario_view(assessment)
     elif st.session_state.view == "context":

@@ -2,6 +2,8 @@
 
 from dataclasses import dataclass, field
 
+from .case_model import CaseState
+
 
 RELATIONSHIP_OPTIONS = (
     "Close personal relationship",
@@ -67,6 +69,15 @@ class ArchivedAnswer:
     revision: int
 
 
+@dataclass(frozen=True)
+class ContextClarification:
+    """A Step 2 source answer, never a derived ethical conclusion."""
+
+    choice: str
+    detail: str = ""
+    fingerprint: str = ""
+
+
 @dataclass
 class Assessment:
     scenario: str = ""
@@ -75,3 +86,5 @@ class Assessment:
     answers: dict[str, Answer] = field(default_factory=dict)
     archive: list[ArchivedAnswer] = field(default_factory=list)
     revision: int = 0
+    context_clarifications: dict[str, ContextClarification] = field(default_factory=dict)
+    case_state: CaseState | None = None
