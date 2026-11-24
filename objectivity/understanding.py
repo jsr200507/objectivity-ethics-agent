@@ -336,7 +336,7 @@ class LocalUnderstandingProvider:
             technical_claim = technical_verb and not _negated(unit, technical_verb.start()) and re.search(r'\b(?:assumptions?|growth|discount\s+rate|yield|forecast|returns?|value|estimate|recovery)\b',unit,re.I)
             if future_claim or technical_claim:
                 named = [key for _,key in mentions(unit)]
-                speaker=personal_mentions[0] if personal_mentions else named[0] if named else 'user' if re.match(r'\s*(?:I|you|we)\b', unit, re.I) else actor('Reported claimant',kind='unknown')
+                speaker=personal_mentions[0] if personal_mentions else named[0] if named else 'user' if re.search(r'\b(?:I|you|we)\s+(?:have\s+)?(?:estimated|noticed|observed|identified|found|assumed|forecast|projected|believe|consider)\b', unit, re.I) or re.match(r'\s*(?:I|you|we)\b', unit, re.I) else actor('Reported claimant',kind='unknown')
                 fact(speaker,'claim',unit.rstrip('.!?'),unit,attribution=speaker)
             # Self-review and advocacy require their own supported mechanisms, not an audit-role keyword.
             selfreview=re.search(r'\b(?:review(?:ing)?|audit(?:ing)?|assess(?:ing)?)\b[^.!?;]{0,75}\b(?:my\s+own|our\s+own|your\s+own|I\s+(?:previously\s+)?prepared|you\s+(?:previously\s+)?prepared)\b|\b(?:I|you)\s+(?:prepared|developed|calculated)\b[^.!?]{0,120}\b(?:now|then)\b[^.!?]{0,55}\b(?:review|audit|assess)\s+(?:it|the\s+same|that|this)\b',unit,re.I)
