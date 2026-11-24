@@ -7,6 +7,7 @@ from dataclasses import dataclass
 import re
 
 from .case_model import CaseFact, CaseState, ReasoningSnapshot
+from .understanding import _authority_kind, _valuation_provider_ids
 
 
 @dataclass(frozen=True)
@@ -91,6 +92,22 @@ def summarise_case(case: CaseState, snapshot: ReasoningSnapshot | None = None) -
         professional.append("Professional role not yet established.")
     if not decision:
         professional.append("Professional decision not yet established.")
+    restrictions = []
+    for fact in grouped.get('context', []):
+        authority = _authority_kind(fact.value)
+        if not authority:
+            continue
+        label, absent = authority
+        detail = f'{_label(case, fact.subject)} — {label}'
+        if absent and fact.status == 'reported':
+            detail += ' explicitly not held (reported)'
+        elif fact.status == 'reported':
+            detail += ' (reported)'
+        detail += ': ' + _described(fact)
+        (restrictions if absent else professional).append(detail)
+    # Material restrictions remain visible even when ordinary context reaches
+    # the normal item cap. Their polarity is stated before compacted detail.
+    professional_items = tuple(dict.fromkeys(_compact(item) for item in restrictions)) + _items(professional)
 
     party_names = [_compact(actor.label, 80) for actor in case.actors if actor.id != "user"]
     people = ["Relevant parties: " + "; ".join(party_names)] if party_names else []
@@ -103,6 +120,15 @@ def summarise_case(case: CaseState, snapshot: ReasoningSnapshot | None = None) -
             people.append(f"{_label(case, fact.subject)}{target}: {_described(fact)}")
     if not people:
         people.append("Relevant parties or relationships have not yet been established.")
+    valuation_work = any(re.search(r'\bvaluations?\b', fact.value, re.I)
+                         for fact in decision if fact.status == 'reported')
+    provider_links = [f for f in grouped.get('professional_relationship', []) if f.status == 'reported' and f.object_id]
+    recorded_providers = any(
+        f.subject in _valuation_provider_ids(f.value, {a.id: a for a in case.actors})
+        for f in grouped.get('claim', []) if f.status == 'reported'
+    )
+    if valuation_work and not provider_links and not recorded_providers:
+        people.append('Valuation provider not identified in the account.')
 
     interests = [f"{_label(case, fact.subject)}: {_described(fact)}" for fact in grouped.get("interest", [])]
     # A reported promotion/job consequence need not imply a financial benefit.
@@ -151,10 +177,10 @@ def summarise_case(case: CaseState, snapshot: ReasoningSnapshot | None = None) -
     for action in case.actions:
         actions.append(f"{_label(case, action.actor_id)}: {_compact(action.description, 150)} — {stages.get(action.stage, 'status not established')}")
     if not actions:
-        actions.append("No actions were mentioned; this does not establish that none have been taken.")
+        actions.append("No steps to address the Objectivity concern were mentioned; this does not establish that none have been taken.")
 
     return (
-        SummarySection("Professional role and decision", _items(professional), not role or not decision or any(f.status in {"unknown", "disputed"} for f in (*role, *decision))),
+        SummarySection("Professional role and decision", professional_items, not role or not decision or any(f.status in {"unknown", "disputed"} for f in (*role, *decision))),
         SummarySection("People and relationships", _items(people), not party_names),
         SummarySection("Financial, commercial and career interests", _items(interests), any(f.status in {"unknown", "disputed"} for f in grouped.get("interest", []))),
         SummarySection("Reported pressure or influence", _items(pressure), any(f.status in {"unknown", "disputed"} for f in grouped.get("pressure", []))),

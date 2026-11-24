@@ -72,6 +72,102 @@ def _context_field(unit):
     return (name, value, 'reported') if value else None
 
 
+def _authority_kind(text):
+    """Classify explicit authority wording for context notes, never evaluation."""
+    for label, pattern in (
+        ('Final approval authority', r'\b(?:final\s+approval\s+(?:authority|responsibility|rights?)|approval\s+(?:authority|rights?)|(?:authority|responsibility|power)\s+(?:to\s+approve|for\s+(?:the\s+)?final\s+approval)|authori[sz]ed\s+to\s+(?:give\s+final\s+approval|approve)|(?:can|cannot|can[’\']t)\s+(?:give\s+final\s+approval|approve\s+(?:the\s+)?final))\b'),
+        ('Recommendation authority', r'\b(?:(?:can|cannot|can[’\']t)\s+(?:only\s+)?recommend|recommendation\s+authority|authority\s+to\s+recommend)\b'),
+        ('Reviewing responsibility', r'\b(?:responsible|responsibility)\s+for\s+(?:review(?:ing)?|supervis(?:e|ing)|oversee(?:ing)?|check(?:ing)?)\b'),
+    ):
+        match = re.search(pattern, text, re.I)
+        if match:
+            prefix = text[:match.end()]
+            absent = bool(re.search(r"\b(?:not|no|never|cannot|can['’]t|don['’]t|doesn['’]t|lack|lacks)\b", prefix, re.I))
+            return label, absent
+    return None
+
+
+def _source_aliases(item):
+    names = [item.label]
+    names += {'company': ['company', 'organisation', 'organization'], 'firm': ['firm'],
+              'valuation_firm': ['external valuation firm', 'independent valuation firm', 'valuation firm'],
+              'cfo': ['chief financial officer']}.get(item.id, [])
+    return tuple(dict.fromkeys(names))
+
+
+def _authority_context(unit, actors):
+    """Yield literal authority statements with their actual recorded speaker."""
+    parties = {name.casefold(): item.id for item in actors.values() if item.id != 'user'
+               for name in _source_aliases(item)}
+    alternatives = '|'.join(re.escape(name) for name in sorted(parties, key=len, reverse=True))
+    subject = r'I|you|we' + (rf'|(?:(?:the|my|your|our)\s+)?(?:{alternatives})' if alternatives else '')
+    statement = re.compile(
+        rf'\b(?P<who>{subject})\s+(?:(?:do|does)\s+not\s+|don[’\']t\s+|doesn[’\']t\s+)?'
+        r'(?:(?:have|has|hold|holds|lack|lacks)\s+(?:(?:no|not|any|the|sole|only)\s+)*'
+        r'(?:final\s+approval|approval|recommendation|authority|responsibility|power)|'
+        r'(?:can|cannot|can[’\']t)\s+(?:only\s+)?(?:recommend|approve|give\s+final\s+approval)|'
+        r'(?:am|are|is)\s+(?:not\s+)?(?:responsible|authori[sz]ed))\b[^.!?;\n"”]*', re.I,
+    )
+    if unit.rstrip().endswith('?'):
+        return
+    for clause in _scoped_clauses(unit):
+        for match in statement.finditer(clause):
+            value = match.group().strip().rstrip(' \'"”')
+            if not _authority_kind(value):
+                continue
+            prefix = unit[:unit.find(clause) + match.start()]
+            if re.search(r"\b(?:whether|if|unknown|unclear|unsure|denies|denied|asks?|asked|do\s+not\s+know|don['’]t\s+know)\b", prefix, re.I):
+                continue
+            who = match['who'].casefold()
+            if who in {'i', 'you', 'we'}:
+                reports = list(re.finditer(r'\b(?:says?|said|told|states?|stated|explains?|explained|claims?|claimed)\b', prefix, re.I))
+                if reports:
+                    before = prefix[:reports[-1].start()]
+                    speakers = [(m.start(), item.id) for item in actors.values() if item.id != 'user'
+                                and item.kind != 'organisation' for name in _source_aliases(item)
+                                for m in re.finditer(r'\b' + re.escape(name) + r'\b', before, re.I)]
+                    if not speakers:
+                        continue
+                    owner = max(speakers)[1]
+                elif prefix.rstrip().endswith(('"', '“', "'")):
+                    continue
+                else:
+                    owner = 'user'
+            else:
+                owner = parties.get(who) or parties.get(re.sub(r'^(?:the|my|your|our)\s+', '', who))
+            if owner:
+                yield owner, value
+
+
+def _valuation_provider_ids(unit, actors):
+    """Bind organisations to actual supplied work, not merely owned property."""
+    if not re.search(r'\b(?:valuations?|estimates?|reports?|work|assessment)\b', unit, re.I):
+        return ()
+    result = []
+    for item in actors.values():
+        if item.kind != 'organisation':
+            continue
+        for name in _source_aliases(item):
+            for mention in re.finditer(r'\b' + re.escape(name) + r'\b', unit, re.I):
+                before, after = unit[:mention.start()], unit[mention.end():]
+                supplied = re.search(r'\b(?:valuations?|estimates?|reports?|work|assessment)\s+(?:(?:that|which)\s+)?(?:(?:was|is|has\s+been)\s+)?(?:prepared|provided|produced|issued|performed|carried\s+out)\s+by\s+(?:(?:a|an|the|our|my|your)\s+)?$', before, re.I)
+                from_work = re.search(r'\b(?:valuation|estimate|report|work|assessment)\s+(?:from|by)\s+(?:(?:a|an|the|our|my|your)\s+)?$', before, re.I)
+                preparing = re.match(r'\s+(?:(?:has|have)\s+)?(?:prepared|provided|produced|issued|estimated)\b', after, re.I)
+                cue = supplied or from_work
+                if (cue and not _negated(before, cue.start())) or (preparing and not _negated(unit, mention.start())):
+                    result.append(item.id)
+    return tuple(dict.fromkeys(result))
+
+
+def _valuation_document_actor(label, sentence):
+    """An artifact phrase is not an organisation without an explicit name cue."""
+    bare = re.fullmatch(r'(?:(?:a|an|the|external|independent|property|commercial|collateral)\s+)*valuation(?:\s+report)?', label, re.I)
+    if not bare:
+        return False
+    named = re.search(r'\b(?:firm|company|organisation|organization|provider)\s+(?:called|named|known\s+as)\s+["“\']?' + re.escape(label) + r'\b', sentence, re.I)
+    return not named
+
+
 def _professional_responsibility(unit, role):
     """Reuse attributed current work, not titles, requests or quoted speakers."""
     field = _context_field(unit)
@@ -110,6 +206,14 @@ def _professional_responsibility(unit, role):
                     continue
                 return value
     return None
+
+
+def _user_provider_work(unit, role):
+    """Require the user's own work, not another person's or quoted review."""
+    return bool(_professional_responsibility(unit, role) or any(
+        re.match(r'\s*(?:I|you|we)\s+(?:am\s+|are\s+)?rely(?:ing)?\s+on\b', clause, re.I)
+        for clause in _scoped_clauses(unit) if not _hypothetical(clause)
+    ))
 
 
 def _decision_reference(text, decision):
@@ -433,7 +537,13 @@ class LocalUnderstandingProvider:
             org=target_org(unit)
             # Explicit provider work links make relative-employment cases distinct.
             if re.search(r'\b(?:review(?:ing)?|assess(?:ing)?|rely(?:ing)?\s+on|evaluat(?:e|ing))\b',unit,re.I) and re.search(r'\b(?:valuation|estimate|report|work|assessment)\b',unit,re.I) and org:
-                fact('user','professional_relationship','Reviewing or relying on provider work',unit,org)
+                if re.search(r'\bvaluations?\b', unit, re.I):
+                    providers = _valuation_provider_ids(unit, actors)
+                    if _user_provider_work(unit, role):
+                        for provider in providers:
+                            fact('user','professional_relationship','Reviewing or relying on provider work',unit,provider)
+                else:
+                    fact('user','professional_relationship','Reviewing or relying on provider work',unit,org)
             close=re.search(r'\b(?:close\s+(?:personal\s+)?friend(?:s)?|long[-\s]standing\s+friend)\b',unit,re.I)
             if close and not _negated(unit,close.start()):
                 third_party=re.search(r"\b(?:of\s+the\s+(?:CEO|CFO)|(?:CEO|manager|director)[’']s\s+close\s+friend)\b",unit,re.I)
@@ -523,7 +633,11 @@ class LocalUnderstandingProvider:
             responsibility = _professional_responsibility(unit, role)
             if responsibility:
                 fact('user','decision_responsibility',responsibility,unit)
-            if re.search(r'\b(?:I|you)\s+(?:have|has)\s+no\s+(?:involvement|responsibility)\b',unit,re.I):fact('user','decision_responsibility','I have no involvement in this decision',unit)
+            for owner, value in _authority_context(unit, actors):
+                fact(owner, 'context', value, unit, attribution=actors[owner].label)
+            for clause in _scoped_clauses(unit):
+                if re.search(r'\b(?:I|you)\s+(?:have|has)\s+no\s+(?:involvement|responsibility)\b', clause, re.I) and not _authority_kind(clause):
+                    fact('user','decision_responsibility','I have no involvement in this decision',unit)
             participation_clauses = _scoped_clauses(unit)
             for relative,employer in employment.items():
                 relname=actors[relative].label.split()[-1]

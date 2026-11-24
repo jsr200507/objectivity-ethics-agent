@@ -11,7 +11,10 @@ import re
 
 from .case_model import ACTION_KINDS, PREDICATES, CaseActor, CaseAction, CaseFact, UnderstandingResult
 from .extraction import MAX_SCENARIO_LENGTH
-from .understanding import LocalUnderstandingProvider, _hypothetical, _stage, _units, validate_understanding
+from .understanding import (
+    LocalUnderstandingProvider, _hypothetical, _stage, _units, _user_provider_work,
+    _valuation_document_actor, _valuation_provider_ids, validate_understanding,
+)
 
 
 class AIUnderstandingError(ValueError):
@@ -239,6 +242,9 @@ def _validate_fact(subject, predicate, value, obj, status, sentence, actors, loc
         return
     if predicate in {'role', 'decision'} and subject != 'user':
         _reject()
+    if predicate == 'professional_relationship' and re.search(r'\bvaluations?\b', sentence, re.I):
+        if subject != 'user' or obj not in _valuation_provider_ids(sentence, actors) or not _user_provider_work(sentence, actors['user'].role or 'Unknown'):
+            _reject()
     if predicate == 'role' and status == 'reported':
         # Explicit Role: fields have no I/you cue. Reuse only the same literal,
         # locally attributed role; a later director's title cannot substitute.
@@ -366,6 +372,8 @@ def parse_ai_understanding(scenario: str, raw: dict) -> UnderstandingResult:
             _reject()
         is_user = label.casefold() in {'user', 'you', 'i'}
         if not is_user and label.casefold() not in excerpt.casefold():
+            _reject()
+        if kind == 'organisation' and _valuation_document_actor(label, sentence):
             _reject()
         if role and role.casefold() not in excerpt.casefold():
             _reject()
