@@ -630,14 +630,18 @@ class Step2StreamlitTests(unittest.TestCase):
 
     def assert_phase_order(self, expected_groups):
         text = self.ui.main_text_without_expanders()
-        groups = re.split(r'THREAT \d+ — ', text)[1:]
-        self.assertEqual(len(groups), expected_groups)
-        for group in groups:
-            identify = 'IDENTIFY — Clarify the threat'
-            evaluate = 'EVALUATE — Assess its significance'
-            self.assertEqual(group.count(identify), 1)
-            self.assertEqual(group.count(evaluate), 1)
-            self.assertLess(group.index(identify), group.index(evaluate))
+        threats = self.ui.reasoning().threats
+        self.assertEqual(len(threats), expected_groups)
+        for threat in threats:
+            self.assertIn(threat.kind, text)
+        plan = plan_questions(self.ui.case())
+        if plan.questions:
+            current = plan.questions[0]
+            stage = 'STAGE 1 — IDENTIFY' if current.phase == 'identify' else 'STAGE 2 — EVALUATE'
+            self.assertIn(stage, text)
+            self.assertIn('Current question:', self.ui.text())
+        else:
+            self.assertIn('All selected clarification questions have been answered', self.ui.text())
         self.assertLessEqual(len(self.ui.app.radio), 1)
 
     def restore_evaluation(self, case):
