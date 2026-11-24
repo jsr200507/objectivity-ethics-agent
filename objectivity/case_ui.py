@@ -390,10 +390,14 @@ def _address(case,snapshot,navigate):
         q = questions[0]
         st.markdown('**Evidence follow-up for a recorded action**')
         with st.form(_key('action_question')):
-            choice = st.radio(q.prompt, q.options, index=None)
+            if q.options:
+                choice = st.radio(q.prompt, q.options, index=None)
+            else:
+                choice = st.text_area(q.prompt, max_chars=100_000)
             st.caption('Why this evidence matters: ' + q.why)
             submit = st.form_submit_button('Record action evidence', type='primary')
-            unknown = st.form_submit_button('Unknown') if 'Unknown' not in q.options else False
+            unknown_available = not q.options or 'Unknown' not in q.options
+            unknown = st.form_submit_button('Unknown') if unknown_available else False
         if submit or unknown:
             try:
                 answer_action_question(case, q.id, 'Unknown' if unknown else choice or '')
