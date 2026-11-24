@@ -178,7 +178,7 @@ class Step2QuestionTests(unittest.TestCase):
         self.assertTrue(reason_case(case).questions)
         report = build_case_report(case)
         self.assertIn('Question limit leaves unresolved', report)
-        self.assertIn('Step 2 question limit leaves unresolved', report.split('## I. Overall ethical conclusion')[1])
+        self.assertIn('Step 2 question limit leaves unresolved', report.split('## 3. Overall Conclusion')[1])
 
     def test_deferred_question_cannot_be_answered_beyond_budget(self):
         case = crowded_case()
@@ -263,12 +263,13 @@ class Step2PersistenceAndReportTests(unittest.TestCase):
     def test_preliminary_report_has_no_final_acceptable_level_verdict(self):
         case = start_case(SCENARIO)
         report = build_case_report(case)
-        early = report.split('## C. Threat evaluation')[1].split('## E. Actions taken')[0]
+        early = '\n'.join(re.findall(r'(?ms)^#### B\. EVALUATE\n(.*?)^#### C\. ADDRESS', report))
         self.assertNotIn('at an acceptable level', early.lower())
-        self.assertIn('Preliminary threat significance', early)
-        self.assertIn('no actual independent third party', early)
-        self.assertIn('commercial property', early.split('## D.')[1])
-        self.assertIn('Residual threats', report)
+        self.assertIn('Preliminary significance before safeguards', early)
+        self.assertIn('not an actual independent review', report)
+        self.assertIn('If the recorded account is accurate', early)
+        self.assertIn('commercial property', early)
+        self.assertIn('Residual position', report)
 
     def test_favourable_initial_circumstances_are_preliminary_but_final_residual_is_preserved(self):
         case = source_case()
@@ -276,10 +277,10 @@ class Step2PersistenceAndReportTests(unittest.TestCase):
         edit_case_fact(case, connection.id, 'No')
         review_case(case)
         report = build_case_report(case)
-        early = report.split('## C. Threat evaluation')[1].split('## E. Actions taken')[0]
+        early = '\n'.join(re.findall(r'(?ms)^#### B\. EVALUATE\n(.*?)^#### C\. ADDRESS', report))
         self.assertIn('Recorded circumstances narrow', early)
         self.assertNotIn('at an acceptable level', early.lower())
-        self.assertIn('At an acceptable level', report.split('## G. Residual threats')[1])
+        self.assertIn('At an acceptable level', report.split('#### C. ADDRESS')[1])
 
     def test_different_financing_and_pressure_answers_change_preliminary_factors_not_personal_ownership(self):
         case = start_case(SCENARIO)
@@ -545,7 +546,7 @@ class Step2RouteAndNeutralWordingTests(unittest.TestCase):
         self.assertEqual(before, case)
         self.assertEqual(residual, assess_actions(case))
         report = build_case_report(case)
-        preliminary = report.split('## C. Threat evaluation')[1].split('## E. Actions taken')[0]
+        preliminary = '\n'.join(re.findall(r'(?ms)^#### B\. EVALUATE\n(.*?)^#### C\. ADDRESS', report))
         self.assertIn('Potentially significant influence', preliminary)
         self.assertNotIn('Potential threat requiring a response', preliminary)
         self.assertNotIn('at an acceptable level', preliminary.lower())

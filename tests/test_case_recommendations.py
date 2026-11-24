@@ -35,7 +35,7 @@ class CaseRecommendationTests(unittest.TestCase):
     def test_property_recommendations_challenge_valuation_and_separate_financing(self):
         text = steps(property_case(financing_consequences='Possible covenant breach', work_changed='No'))
         self.assertIn("valuation's assumptions, methods and supporting evidence", text)
-        self.assertIn('separate the professional review and recommendation from financing or covenant negotiations', text)
+        self.assertIn('Separate the professional review and recommendation from financing or covenant negotiations', text)
         self.assertIn('Possible covenant breach', text)
         self.assertIn('not determine the professional judgment or be treated as a verified outcome', text)
         self.assertIn('Document professional disagreements, unresolved exceptions', text)
@@ -94,14 +94,14 @@ class CaseRecommendationTests(unittest.TestCase):
                                    challenge_safety='No practicable route is known'))
         self.assertIn('No practicable route is reported as known', text)
         self.assertIn('does not establish retaliation or that no route exists', text)
-        self.assertIn('if none is available internally', text)
+        self.assertIn('If none is available internally', text)
         self.assertIn('confidential professional advice externally', text)
         self.assertNotIn('audit committee', text)
 
     def test_unknown_resources_get_conditional_not_assumed_external_review(self):
         text = steps(source_case())
-        self.assertIn('If suitable internal separation is unavailable', text)
-        self.assertIn('external review, if accessible; its availability is not assumed', text)
+        self.assertIn('where accessible', text)
+        self.assertIn('Consider competent external review where accessible', text)
         self.assertNotIn('audit committee', text)
         self.assertNotIn('independent department', text)
 
@@ -138,12 +138,13 @@ class CaseRecommendationTests(unittest.TestCase):
         text = steps(property_case(financing_consequences='Unknown'))
         self.assertNotIn('The reported possibility (Unknown)', text)
         self.assertNotIn('covenant breach', text.lower())
-        self.assertIn('financing incentive', text)
+        self.assertIn('financing or covenant negotiations', text)
 
     def test_personal_bonus_has_different_primary_response_from_financing(self):
         text = steps(source_case())
         self.assertIn('your reported incentive (Bonus linked to reported profit)', text)
-        self.assertIn('removed or decoupled from Assess the inventory write-down', text)
+        self.assertIn('remove or decouple your reported incentive', text)
+        self.assertIn('Assess the inventory write-down', text)
         self.assertNotIn('covenant negotiations', text)
 
     def test_family_interest_does_not_assume_user_owns_relatives_assets(self):
@@ -162,7 +163,7 @@ class CaseRecommendationTests(unittest.TestCase):
                          fact('fee-link', 'interest_connection', 'Yes', subject='firm'),
                          fact('dependence', 'commercial_dependence', 'A major source of income or business', subject='firm')]
         self.assertIn('same income pressure a weak alternative', steps(sample))
-        self.assertIn('commercial considerations do not determine', steps(sample))
+        self.assertIn('Use a reviewer outside that incentive', steps(sample))
 
     def test_familiarity_self_review_and_advocacy_have_distinct_primary_responses(self):
         sources = [
@@ -173,7 +174,7 @@ class CaseRecommendationTests(unittest.TestCase):
         outputs = []
         for source, expected in zip(sources, ('outside the recorded relationship with CFO',
                                              'someone who did not prepare the earlier work',
-                                             'Separate the recorded promotional or representative role')):
+                                             'Separate the promotional or representative role')):
             sample = reasoning_case(responsible(), source)
             review_case(sample)
             text = steps(sample)
@@ -278,18 +279,18 @@ class CaseRecommendationTests(unittest.TestCase):
     def test_report_places_case_specific_safeguards_before_action_history_follow_up(self):
         sample = property_case()
         report = build_case_report(sample)
-        primary = report.index("**Primary:**")
+        primary = report.index("**Primary safeguard:**")
         history = report.index("Establish what has already been done or planned")
         self.assertLess(primary, history)
-        self.assertIn("**Alternative:**", report)
-        self.assertIn("**Supporting evidence:**", report)
+        self.assertIn("**Alternative safeguard:**", report)
+        self.assertIn("**Supporting actions and evidence:**", report)
 
     def test_report_structure_and_proposed_implemented_distinction_remain_intact(self):
         sample = property_case()
         before = deepcopy(sample)
         report = build_case_report(sample)
-        self.assertEqual(re.findall(r'^## ([A-I])\. ', report, re.MULTILINE), list('ABCDEFGHI'))
-        self.assertIn('Primary:', report)
+        self.assertEqual(re.findall(r'^## ([1-3])\. ', report, re.MULTILINE), list('123'))
+        self.assertIn('Primary safeguard:', report)
         self.assertIn('recommendations, not completed safeguards', report)
         self.assertNotIn('**Recorded stage:** Implemented', report)
         self.assertEqual(sample, before)
@@ -313,9 +314,9 @@ class CaseRecommendationTests(unittest.TestCase):
         sample = property_case()
         with patch('objectivity.case_actions._format_recommendation', return_value='Opaque compatibility output'):
             report = build_case_report(sample)
-        section = report.split('## H. Prioritised next steps')[1].split('## I.')[0]
+        section = report.split('## 1. Executive Summary')[1]
         self.assertNotIn('Opaque compatibility output', section)
-        self.assertEqual(section.count('**Primary:**'), 2)
+        self.assertEqual(section.count('**Primary safeguard:**'), 2)
         self.assertIn('Establish what has already been done', section)
 
     def test_report_renders_typed_recommendations_without_legacy_next_steps(self):
@@ -323,8 +324,8 @@ class CaseRecommendationTests(unittest.TestCase):
         result = assess_actions(sample)
         with patch('objectivity.case_report.assess_actions', return_value=replace(result, next_steps=())):
             report = build_case_report(sample)
-        section = report.split('## H. Prioritised next steps')[1].split('## I.')[0]
-        self.assertEqual(section.count('**Primary:**'), len(result.recommendations))
+        section = report.split('## 1. Executive Summary')[1]
+        self.assertEqual(section.count('**Primary safeguard:**'), len(result.recommendations))
         self.assertIn('Establish what has already been done', section)
 
     def test_primary_label_in_user_context_cannot_hide_a_non_safeguard_follow_up(self):
@@ -337,7 +338,7 @@ class CaseRecommendationTests(unittest.TestCase):
         result = assess_actions(sample)
         self.assertTrue(result.recommendations)
         self.assertTrue(any('Primary: ' in step for step in result.follow_up_steps))
-        section = build_case_report(sample).split('## H. Prioritised next steps')[1].split('## I.')[0]
+        section = build_case_report(sample).split('## 3. Overall Conclusion')[1]
         self.assertIn('retain the recorded conditions supporting acceptability', section)
         self.assertIn('Primary:', section)
 
@@ -348,7 +349,7 @@ class CaseRecommendationTests(unittest.TestCase):
         recommendation = assess_actions(sample).recommendations[0]
         self.assertFalse(recommendation.remit or recommendation.context)
         self.assertIn('Assess the inventory write-down', recommendation.considerations[0])
-        self.assertIn('further material facts may change', recommendation.considerations[0])
+        self.assertIn('must not be assumed', recommendation.considerations[0])
         self.assertEqual(sample, before)
 
 

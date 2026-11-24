@@ -73,7 +73,7 @@ class OptionalAIAppTests(unittest.TestCase):
             self.assertEqual(sum(h.label == 'Optional AI request' for h in saved.assessment.case_state.history), 2)
             if error:
                 self.assertIn('timed out', self.text())
-                self.assertIn('## I. Overall ethical conclusion and limitations', self.text())
+                self.assertIn('## 3. Overall Conclusion', self.text())
 
     def test_report_request_count_is_autosaved_before_any_further_user_action(self):
         self._assert_report_request_is_immediately_autosaved()
@@ -164,7 +164,7 @@ class OptionalAIAppTests(unittest.TestCase):
         self.begin(consent=False)
         self.assertIn('Deterministic fallback', self.text())
         self.to_report()
-        self.assertIn('## E. Actions taken and proposed', self.text())
+        self.assertIn('#### C. ADDRESS', self.text())
         self.assertFalse(self.provider.calls)
         self.assertFalse(any(item.label == 'Create AI-assisted report overview' for item in self.app.button))
 
@@ -176,7 +176,7 @@ class OptionalAIAppTests(unittest.TestCase):
         with patch('objectivity.ai_report.build_ai_report_request',
                    side_effect=AIReportError('This assessment is too large for optional overview assistance.')):
             self.to_report()
-        self.assertIn('## E. Actions taken and proposed', self.text())
+        self.assertIn('#### C. ADDRESS', self.text())
         self.assertFalse(self.provider.calls)
 
     def test_optional_report_preparation_failure_keeps_the_complete_report_available(self):
@@ -185,7 +185,7 @@ class OptionalAIAppTests(unittest.TestCase):
         with patch('objectivity.ai_report.build_ai_report_request',
                    side_effect=AIReportError('This assessment is too large for optional overview assistance.')):
             self.to_report()
-        self.assertIn('## I. Overall ethical conclusion and limitations', self.text())
+        self.assertIn('## 3. Overall Conclusion', self.text())
         self.assertEqual(len(self.provider.calls), 1)
 
     def test_configured_provider_never_receives_scenario_without_consent(self):
@@ -247,7 +247,7 @@ class OptionalAIAppTests(unittest.TestCase):
         self.request_report()
         self.assertEqual(len(self.provider.calls), 2)
         self.assertTrue(self.has_overview())
-        self.assertIn('## I. Overall ethical conclusion and limitations', self.text())
+        self.assertIn('## 3. Overall Conclusion', self.text())
 
     def test_successful_report_is_reused_on_rerun_and_repeated_explicit_request(self):
         self.begin()
@@ -280,7 +280,7 @@ class OptionalAIAppTests(unittest.TestCase):
         self.assertNotIn('network connection to Groq could not', self.text())
         self.assertEqual(sum(h.label == 'Optional AI request' for h in self.case().history), 1)
         self.to_report()
-        self.assertIn('## B. Identified potential Objectivity threats', self.text())
+        self.assertIn('## 2. Threat-by-Threat Assessment', self.text())
 
     def test_rate_limit_timeout_and_failure_preserve_a_working_local_assessment(self):
         for code in ('rate_limit', 'timeout', 'unavailable'):
@@ -295,7 +295,7 @@ class OptionalAIAppTests(unittest.TestCase):
                 self.app.run()
                 self.to_report()
                 self.assertEqual(len(self.provider.calls), 1)
-                self.assertIn('## E. Actions taken and proposed', self.text())
+                self.assertIn('#### C. ADDRESS', self.text())
 
     def test_contradictory_ai_report_is_not_displayed_or_saved_as_a_conclusion(self):
         self.provider.bad_report = True

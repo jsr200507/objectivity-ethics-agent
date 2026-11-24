@@ -260,7 +260,7 @@ class ScenarioCaseAppTests(unittest.TestCase):
         self.assertIn('Recommended safeguards', text)
         self.assertIn('Problem identified', text)
         self.assertIn('Primary safeguard', text)
-        self.assertIn('Alternative if the primary response is unavailable', text)
+        self.assertIn('Alternative safeguard', text)
         self.assertIn('Supporting actions and evidence', text)
         self.assertIn('Existing or planned actions', text)
         self.assertLess(text.index('Recommended safeguards'), text.index('Existing or planned actions'))
@@ -278,19 +278,19 @@ class ScenarioCaseAppTests(unittest.TestCase):
             result = assess_actions(self.case())
             text = self.main_text_without_expanders()
             self.assertEqual(text.count('Primary safeguard'), len(result.recommendations))
-            self.assertEqual(text.count('Case-specific considerations'), len(result.recommendations))
+            self.assertEqual(text.count('Case-specific application'), len(result.recommendations))
             for recommendation in result.recommendations:
                 for detail in (recommendation.primary, *recommendation.considerations,
-                               recommendation.alternative, recommendation.supporting):
+                               recommendation.alternative, *recommendation.supporting_actions):
                     self.assertIn(detail, text)
             self.assertNotIn('Opaque legacy projection', text)
             self.assertFalse(self.case().actions)
             self.click('Generate Objectivity report')
             report = next(item.value for item in self.app.markdown if item.value.startswith('# Objectivity Ethical Assessment Report'))
-            section = report.split('## H. Prioritised next steps')[1].split('## I.')[0]
+            section = report.split('## 2. Threat-by-Threat Assessment')[1].split('## 3. Overall Conclusion')[0]
             for recommendation in result.recommendations:
                 for detail in (recommendation.primary, *recommendation.considerations,
-                               recommendation.alternative, recommendation.supporting):
+                               recommendation.alternative, *recommendation.supporting_actions):
                     self.assertIn(_escaped(detail), section)
             self.assertNotIn('Opaque legacy projection', section)
             self.assertNotIn('**Recorded stage:** Implemented', report)
@@ -316,6 +316,27 @@ class ScenarioCaseAppTests(unittest.TestCase):
         self.assertIn('02 · Self-interest', text)
         for recommendation in result.recommendations:
             self.assertIn(recommendation.primary, text)
+        self.assertFalse(self.case().actions)
+
+    def test_safeguard_cards_have_six_ordered_sections_and_a_dynamic_short_status(self):
+        from objectivity.case_actions import assess_actions
+        from tests.test_authority_provider_context import SCENARIO
+        self.begin(SCENARIO)
+        self.to_actions()
+        result = assess_actions(self.case())
+        text = self.main_text_without_expanders()
+        self.assertIn('2 of 2 threats need further action or evidence', text)
+        self.assertNotIn(result.conclusion, text)
+        blocks = re.split(r'### \d+ · ', text)[1:]
+        self.assertEqual(len(blocks), len(result.recommendations))
+        for block in blocks:
+            titles = ['Problem identified', 'Why it matters', 'Primary safeguard',
+                      'Case-specific application', 'Alternative safeguard', 'Supporting actions and evidence']
+            positions = [block.index(title) for title in titles]
+            self.assertEqual(positions, sorted(positions))
+        for recommendation in result.recommendations:
+            for detail in (*recommendation.application, *recommendation.supporting_actions):
+                self.assertIn('- ' + detail, text)
         self.assertFalse(self.case().actions)
 
     def test_recorded_unknown_participation_does_not_trigger_an_artificial_question(self):
@@ -628,14 +649,14 @@ class ScenarioCaseAppTests(unittest.TestCase):
         self.assertEqual(self.round_trip().assessment.case_state.actions[0].checks["outcome"],
                          "Continuing influence remains")
 
-    def test_report_has_nine_professional_sections_download_and_no_engine_ids(self):
+    def test_report_has_three_professional_sections_download_and_no_engine_ids(self):
         self.begin(EXAMPLE_SCENARIO)
         self.to_actions()
         self.click("No relevant action has been taken")
         self.click("Generate Objectivity report")
         report = next(item.value for item in self.app.markdown
                       if item.value.startswith("# Objectivity Ethical Assessment Report"))
-        self.assertEqual(re.findall(r"^## ([A-I])\. ", report, re.MULTILINE), list("ABCDEFGHI"))
+        self.assertEqual(re.findall(r"^## ([1-3])\. ", report, re.MULTILINE), list("123"))
         for record in (*self.case().facts, *self.reasoning().threats):
             self.assertNotIn(record.id, report)
         self.assertNotIn("answer.", report)

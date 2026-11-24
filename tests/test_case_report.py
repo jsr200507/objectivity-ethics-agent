@@ -71,10 +71,13 @@ class CaseReportTests(unittest.TestCase):
         with patch("objectivity.case_report.reason_case", return_value=snapshot), patch("objectivity.case_report.assess_actions", return_value=addressed):
             return build_case_report(case)
 
-    def test_nine_sections_are_specific_and_same_category_sources_stay_distinct(self):
+    def test_three_sections_and_each_threats_stages_keep_sources_distinct(self):
         report = self.report()
-        for heading in ("A. Scenario summary", "B. Identified potential Objectivity threats", "C. Threat evaluation", "D. Reasonable and informed third party assessment", "E. Actions taken and proposed", "F. Safeguard effectiveness", "G. Residual threats", "H. Prioritised next steps", "I. Overall ethical conclusion and limitations"):
+        for heading in ("1. Executive Summary", "2. Threat-by-Threat Assessment", "3. Overall Conclusion"):
             self.assertIn("## " + heading, report)
+        for block in report.split('### THREAT ')[1:]:
+            self.assertLess(block.index('#### A. IDENTIFY'), block.index('#### B. EVALUATE'))
+            self.assertLess(block.index('#### B. EVALUATE'), block.index('#### C. ADDRESS'))
         self.assertIn("Self\\-interest — source 1", report)
         self.assertIn("Self\\-interest — source 2", report)
         self.assertIn("CFO asked me to go easy", report)

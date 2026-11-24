@@ -290,11 +290,13 @@ def _address(case,snapshot,navigate):
     from .case_actions import assess_actions, action_questions
     from .case_reasoning import ACCEPTABLE
     from .case_actions import SUPPORTED
+    from .case_presentation import status_summary, threat_overview
 
     st.header('Step 3: Address Threats')
     st.caption('Recommended responses are generated from the current Step 2 findings. They are options, not actions already taken or proof that a threat has been removed.')
 
     result = assess_actions(case, snapshot)
+    st.info(status_summary(result))
     outcomes = {outcome.threat_id: outcome for outcome in result.outcomes}
     recommendations = {item.threat_id: item for item in result.recommendations}
     response_needed = bool(snapshot.threats) and any(
@@ -312,13 +314,11 @@ def _address(case,snapshot,navigate):
                 if outcome:
                     st.caption('Current residual position: ' + outcome.status)
                 st.markdown('**Problem identified**')
-                st.write(threat.mechanism)
+                problem, relevance = threat_overview(case, threat)
+                st.write(problem)
 
-                preliminary = preliminary_assessment(case, snapshot, threat)
                 st.markdown('**Why it matters**')
-                st.write(preliminary.significance)
-                if preliminary.factors:
-                    st.caption(preliminary.factors[0])
+                st.write(relevance)
 
                 if outcome and outcome.status == ACCEPTABLE:
                     st.success('No additional safeguard is currently indicated on the recorded circumstances.')
@@ -329,13 +329,14 @@ def _address(case,snapshot,navigate):
                     if recommendation:
                         st.markdown('**Primary safeguard**')
                         st.write(recommendation.primary)
-                        st.markdown('**Case-specific considerations**')
+                        st.markdown('**Case-specific application**')
                         for detail in recommendation.considerations:
-                            st.write(detail)
-                        st.markdown('**Alternative if the primary response is unavailable**')
+                            st.write('- ' + detail)
+                        st.markdown('**Alternative safeguard**')
                         st.write(recommendation.alternative)
                         st.markdown('**Supporting actions and evidence**')
-                        st.write(recommendation.supporting)
+                        for detail in recommendation.supporting_actions or (recommendation.supporting,):
+                            st.write('- ' + detail)
                     else:
                         st.caption('A case-specific recommendation is not available from the current rule set; retain the unresolved limitation and seek appropriate professional guidance.')
 
@@ -348,8 +349,6 @@ def _address(case,snapshot,navigate):
                             for gap in outcome.unknowns:
                                 st.write(gap)
                         st.caption(outcome.third_party)
-
-    st.caption(result.conclusion)
 
     st.divider()
     st.subheader('Existing or planned actions')
