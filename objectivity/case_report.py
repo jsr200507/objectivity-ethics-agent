@@ -281,35 +281,23 @@ def build_case_report(case: CaseState) -> str:
     lines += ["## H. Prioritised next steps", ""]
     steps = tuple(dict.fromkeys(step for step in addressed.next_steps if step))
     if steps:
-        # Put case-specific safeguards first; action-history clarification is
-        # retained as a limitation/follow-up, not the opening recommendation.
-        ordered_steps = tuple(step for step in steps if "Primary: " in step) + tuple(
-            step for step in steps if "Primary: " not in step
-        )
-        for number, step in enumerate(ordered_steps, 1):
-            if "Primary: " not in step or "Alternative: " not in step or "Supporting: " not in step:
-                lines += [f"{number}. {_escaped(step)}", ""]
-                continue
-            prefix, remainder = step.split("Primary: ", 1)
-            if " Context: " in remainder:
-                primary, remainder = remainder.split(" Context: ", 1)
-                context, remainder = remainder.split(" Alternative: ", 1)
-            else:
-                primary, remainder = remainder.split(" Alternative: ", 1)
-                context = ""
-            alternative, supporting = remainder.split(" Supporting: ", 1)
-            target_and_role = prefix.removeprefix("For ").strip()
-            target, separator, role_context = target_and_role.partition(". ")
-            lines += [f"### {number}. {_escaped(target.rstrip('.'))}", ""]
-            if separator and role_context.strip():
-                lines += [f"**Role and authority context:** {_escaped(role_context.strip())}", ""]
-            lines += [f"**Primary:** {_escaped(primary.strip())}", ""]
-            if context.strip():
-                lines += [f"**Case-specific context:** {_escaped(context.strip())}", ""]
-            lines += [f"**Alternative:** {_escaped(alternative.strip())}", "",
-                      f"**Supporting evidence:** {_escaped(supporting.strip())}", ""]
+        # Structured recommendations come first; unresolved action-history
+        # checks remain visible after the measures, not as the opening advice.
+        for number, recommendation in enumerate(addressed.recommendations, 1):
+            lines += [f"### {number}. {_escaped(recommendation.target)}", ""]
+            if recommendation.remit:
+                lines += [f"**Role and authority context:** {_escaped(recommendation.remit)}", ""]
+            lines += [f"**Primary:** {_escaped(recommendation.primary)}", ""]
+            if recommendation.context:
+                lines += [f"**Case-specific context:** {_escaped(recommendation.context)}", ""]
+            lines += [f"**Alternative:** {_escaped(recommendation.alternative)}", "",
+                      f"**Supporting evidence:** {_escaped(recommendation.supporting)}", ""]
+        other_steps = [step for step in steps if "Primary: " not in step]
+        for number, step in enumerate(other_steps, len(addressed.recommendations) + 1):
+            lines += [f"{number}. {_escaped(step)}", ""]
     else:
         lines += ["Maintain the recorded protections, reconsider the assessment when material circumstances change, and resolve any limitations before relying on a professional conclusion.", ""]
+
     lines += ["## I. Overall ethical conclusion and limitations", "", _escaped(addressed.conclusion), ""]
     uncertainties = tuple(dict.fromkeys(
         [_uncertainty_description(case, fact) for fact in facts.values() if fact.status in {"unknown", "disputed"}]
