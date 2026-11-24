@@ -164,6 +164,7 @@ def _material_question(case,snapshot,navigate,plan):
         if current:
             st.caption('THREAT IDENTIFIED · ' + current.kind.upper() + ' · Source or beneficiary: ' + _actor(case, current.subject))
             st.markdown('**STAGE ' + ('1 — IDENTIFY' if q.phase == 'identify' else '2 — EVALUATE') + '**')
+            st.caption('Current question: ' + current.kind + ' · ' + q.phase.upper())
         else:
             st.markdown('**CLARIFY THE PROFESSIONAL DECISION**')
 
