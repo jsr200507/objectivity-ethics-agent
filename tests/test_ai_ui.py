@@ -217,11 +217,11 @@ class OptionalAIAppTests(unittest.TestCase):
         self.assertEqual(len(self.provider.calls), 1)
 
     def test_structured_answers_navigation_and_reruns_do_not_consume_more_calls(self):
-        from objectivity.case_reasoning import reason_case
+        from objectivity.case_questions import plan_questions
         self.begin()
         self.confirm()
         for _ in range(10):
-            questions = reason_case(self.case()).questions
+            questions = plan_questions(self.case()).questions
             if not questions:
                 break
             question = questions[0]

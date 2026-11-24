@@ -78,8 +78,11 @@ class ScenarioCaseAppTests(unittest.TestCase):
         )
 
     def reasoning(self):
+        from dataclasses import replace
         from objectivity.case_reasoning import reason_case
-        return reason_case(self.case())
+        from objectivity.case_questions import plan_questions
+        snapshot = reason_case(self.case())
+        return replace(snapshot, questions=plan_questions(self.case(), snapshot).questions)
 
     def main_text_without_expanders(self):
         """Inspect the main reading path without optional source/edit records."""
@@ -254,7 +257,7 @@ class ScenarioCaseAppTests(unittest.TestCase):
         self.assertFalse(self.reasoning().questions)
         self.assertFalse(self.app.radio)
         self.assertIn('Familiarity', self.text())
-        self.assertIn('Acceptability not established', self.text())
+        self.assertIn('Significance remains uncertain', self.text())
         self.to_actions()
         self.assertIn('What steps, if any, have you already taken to address these concerns?', self.text())
 
@@ -283,7 +286,8 @@ class ScenarioCaseAppTests(unittest.TestCase):
         self.assertEqual(len(self.reasoning().threats), 1)
         self.assertEqual(self.reasoning().evaluations[0].outcome, ACCEPTABLE)
         self.assertFalse(self.app.radio)
-        self.assertIn('At an acceptable level', self.text())
+        self.assertIn('Recorded circumstances narrow this potential threat', self.text())
+        self.assertNotIn('At an acceptable level', self.text())
         self.to_actions()
         self.assertFalse(action_questions(self.case()))
         self.assertFalse(self.app.radio)
@@ -411,6 +415,12 @@ class ScenarioCaseAppTests(unittest.TestCase):
         self.begin(EXAMPLE_SCENARIO)
         self.confirm_account()
         responsibility = self.answer_material("I supervise or review the work")
+        # The threat-grouped interview completes the first threat and asks
+        # pressure-specific Identify/Evaluate questions before changed work.
+        for _ in range(7):
+            if self.reasoning().questions[0].predicate == 'work_changed':
+                break
+            self.answer_material('Unknown')
         pressure_question = self.reasoning().questions[0]
         self.assertEqual(pressure_question.predicate, "work_changed")
         self.answer_material("Yes", "I had softened the challenge before raising my concern.")

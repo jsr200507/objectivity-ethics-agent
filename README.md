@@ -80,15 +80,22 @@ Threats → Step 3: Address Threats → Final Ethical Assessment Report**
    **Confirm scenario and continue**. This is one account-confirmation step, not
    independent verification of the events.
 3. In **Step 2: Identify & Evaluate Threats**, the active material question is the
-   main interaction. It names the relevant threats, explains **Why this question?**
+   main interaction. Questions are grouped by their specific threat and source:
+   **IDENTIFY — Clarify the threat**, then **EVALUATE — Assess its significance**,
+   before moving to the next threat. Each explains **Why this question?**
    and how the answer could affect the evaluation. Select **Record answer and
    reassess** to update the findings. Known facts are reused; an explicit
    **Unknown** remains a limitation and is not repeatedly asked. Where no material
    clarification is needed, the app explains the evaluation without inventing a
-   question.
-4. Review the current threat categories, scenario-specific mechanisms, acceptable-
-   level assessments and uncertainties. Supporting sources and the hypothetical
+   question. There is no minimum and at most seven distinct clarification questions
+   across Step 2, including conditional follow-ups; a capped question remains an
+   explicit unresolved issue. Superseded answers retain their slots, and editing
+   a material source can reopen the same question without resetting the limit.
+4. Review the current threat categories, scenario-specific mechanisms, preliminary
+   significance and uncertainties. Supporting sources and the hypothetical
    reasonable and informed third party reasoning are available in an expander.
+   Final residual acceptability is assessed after actions, not asserted in Step 2
+   or in the report's preliminary evaluation and third-party sections.
    Use **Review scenario summary** to revisit the account. Material corrections
    return to Step 1 for confirmation and recalculate dependent findings.
 5. Select **Review existing actions** to open **Step 3: Address Threats**:

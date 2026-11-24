@@ -9,6 +9,8 @@ import re
 from .case_actions import assess_actions
 from .case_model import CaseFact, CaseState, ReasoningSnapshot
 from .case_reasoning import ACCEPTABLE, reason_case
+from .case_questions import plan_questions
+from .case_preliminary import QUESTION_LABELS, preliminary_assessment
 
 
 _SOURCE_WORDING = {
@@ -85,6 +87,7 @@ def _structured_detail(fact: CaseFact) -> str:
         'commercial_dependence': 'Commercial dependence',
         'work_changed': 'Professional work already changed in response to influence',
         'prior_work_affected': 'Earlier professional work affected',
+        **QUESTION_LABELS,
     }
     label = labels.get(fact.predicate)
     return f'{label}: {fact.value}' if label else fact.value
@@ -101,6 +104,7 @@ def _uncertainty_description(case: CaseState, fact: CaseFact) -> str:
         "commercial_dependence": f"{actor}'s commercial dependence",
         "work_changed": "Whether the professional work changed in response to influence",
         "prior_work_affected": "Whether earlier professional work was affected",
+        **QUESTION_LABELS,
     }
     subject = labels.get(fact.predicate, f"Information concerning {actor}")
     if fact.status == "disputed":
@@ -114,6 +118,7 @@ def build_case_report(case: CaseState) -> str:
     """Recompute nine professional sections; do not mutate or trust old conclusions."""
     case = deepcopy(case)
     snapshot = reason_case(case)
+    plan = plan_questions(case, snapshot)
     addressed = assess_actions(case, snapshot)
     facts = {fact.id: fact for fact in _active_facts(case)}
     threat_labels = _threat_labels(case, snapshot)
@@ -181,20 +186,21 @@ def build_case_report(case: CaseState) -> str:
             lines += ["**Remaining uncertainty:**", "", *_paragraphs(threat.uncertainty), ""]
     if snapshot.threats:
         lines += ["These are potential sources of influence, not proof of impaired Objectivity, misconduct or a violation.", ""]
-    lines += ["## C. Threat evaluation", "", "**EVALUATE — Significance and acceptable-level assessment**", ""]
+    lines += ["## C. Threat evaluation", "", "**EVALUATE — Preliminary threat significance before safeguards**", "",
+        "This is a preliminary assessment of possible influences, not a final residual-acceptability decision.", ""]
     for threat in snapshot.threats:
         evaluation = evaluation_by_id.get(threat.id)
         if evaluation is None:
             lines += [_escaped(threat_labels[threat.id]) + ": evaluation is not established.", ""]
             continue
-        reasons = [item for item in evaluation.reasoning if item != threat.mechanism]
-        lines += [f"**{_escaped(threat_labels[threat.id])}: {_escaped(evaluation.outcome)}**", "", *_paragraphs(reasons), ""]
-        if evaluation.material_gaps:
-            lines += ["Material information affecting the initial evaluation:", "", *_paragraphs(evaluation.material_gaps), ""]
+        preliminary = preliminary_assessment(case, snapshot, threat, plan)
+        lines += [f"**{_escaped(threat_labels[threat.id])}: {_escaped(preliminary.significance)}**", "", *_paragraphs(preliminary.factors), ""]
+        if preliminary.gaps:
+            lines += ["Material information affecting the preliminary evaluation:", "", *_paragraphs(preliminary.gaps), ""]
     if snapshot.interactions:
         lines += ["**Combined influences:**", "", *_paragraphs(snapshot.interactions), ""]
     if not snapshot.threats:
-        lines += ["There is no threat-specific acceptability conclusion on the current record.", ""]
+        lines += ["There is no threat-specific significance conclusion on the current record.", ""]
     lines += ["## D. Reasonable and informed third party assessment", "",
         "This applies a hypothetical reasonable and informed third party's perspective to the recorded circumstances. No actual independent third party has reviewed this assessment.", ""]
     for threat in snapshot.threats:
@@ -202,7 +208,7 @@ def build_case_report(case: CaseState) -> str:
         if evaluation:
             # The mechanism and literal evidence are already set out in B;
             # retain the conditional test without repeating the narrative.
-            test = evaluation.third_party.replace(threat.mechanism + ' ', '')
+            test = preliminary_assessment(case, snapshot, threat, plan).third_party
             lines += [f"**{_escaped(threat_labels[threat.id])}:** {_escaped(test)}", ""]
     lines += ["The effect of existing conditions and recorded actions is reassessed in the residual findings below.", ""]
     lines += ["## E. Actions taken and proposed", "", "**ADDRESS — Existing actions, proposed measures and recommended responses**", ""]
@@ -281,6 +287,7 @@ def build_case_report(case: CaseState) -> str:
     lines += ["## I. Overall ethical conclusion and limitations", "", _escaped(addressed.conclusion), ""]
     uncertainties = tuple(dict.fromkeys(
         [_uncertainty_description(case, fact) for fact in facts.values() if fact.status in {"unknown", "disputed"}]
+        + ['Step 2 question limit leaves unresolved: ' + question.prompt for question in plan.deferred]
         + list(addressed.unknowns) + list(snapshot.limitations) + list(case.limitations)
     ))
     if uncertainties:

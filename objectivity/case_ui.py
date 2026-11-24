@@ -3,6 +3,8 @@ import streamlit as st
 
 from .case_model import ACTION_KINDS, ACTION_STAGES, PREDICATES, CaseHistory
 from .case_reasoning import reason_case
+from .case_questions import MAX_STEP2_QUESTIONS, plan_questions
+from .case_preliminary import QUESTION_LABELS, preliminary_assessment
 from .case_workflow import (
     add_case_actor, add_case_fact, answer_action_question, answer_case_question,
     edit_case_fact, review_case, save_case_action, sync_case,
@@ -18,6 +20,7 @@ _LABELS = {
     'commercial_dependence':'Commercial dependence', 'work_changed':'Reported change to work',
     'prior_work_affected':'Earlier work affected', 'claim':'Reported claim, not established truth',
     'assurance':'Reported assurance or belief', 'context':'Additional reported context',
+    **QUESTION_LABELS,
 }
 _ACTION_LABELS = {
     'independent_review':'Independent review', 'eliminate':'Eliminate the relevant circumstances',
@@ -147,15 +150,30 @@ def _findings(case, snapshot):
     for interaction in snapshot.interactions: st.write(interaction)
 
 
-def _material_question(case,snapshot,navigate):
-    if not snapshot.questions:
-        st.info('No further clarification is needed for the evaluation currently supported by your account. Any unresolved uncertainties remain in the findings below.')
+def _material_question(case,snapshot,navigate,plan):
+    if plan.answered_count > MAX_STEP2_QUESTIONS:
+        st.caption(f'{plan.answered_count} answers retained from earlier progress. The current interview permits no further new questions beyond its seven-question limit.')
+    else:
+        st.caption(f'{plan.answered_count} of at most {MAX_STEP2_QUESTIONS} clarification questions answered · No minimum required.')
+    if not plan.questions:
+        if plan.limit_reached:
+            st.warning('The seven-question limit has been reached. Material issues remain unresolved below; the limit does not mean that the threats have been fully assessed.')
+        else:
+            st.info('The recorded answers are ready for a preliminary evaluation. Explicit Unknown answers and other material uncertainties remain limitations.')
         return
-    q=snapshot.questions[0]
-    st.subheader('A question that could change the assessment')
-    related = [f'{t.kind} involving {_actor(case,t.subject)}' for t in snapshot.threats if t.id in q.threat_ids]
-    st.caption('Concerns: ' + '; '.join(dict.fromkeys(related)) if related else 'Clarifying the professional decision before evaluating its significance.')
-    st.caption(f'{len(snapshot.questions)} currently relevant clarification(s); answers may change the next step.')
+    q=plan.questions[0]
+    current = next((t for t in snapshot.threats if t.id in q.threat_ids), None)
+    if current:
+        index = snapshot.threats.index(current) + 1
+        st.subheader(f'THREAT {index:02} — {current.kind.upper()}')
+        st.caption('THREAT IDENTIFIED · Source or beneficiary: ' + _actor(case,current.subject))
+        st.write(current.mechanism)
+        if q.phase == 'evaluate':
+            st.caption('IDENTIFY — The recorded circumstances are reused; unanswered or explicitly unknown facts remain qualified.')
+    else:
+        st.subheader('Establish the professional decision')
+    title = 'STAGE 1 — IDENTIFY: Clarify the threat' if q.phase == 'identify' else 'STAGE 2 — EVALUATE: Assess its significance'
+    st.write('**' + title + '**')
     with st.form(_key('material_question')):
         if q.options:
             choice=st.radio(q.prompt,q.options,index=None,key=_key('material_choice'))
@@ -170,6 +188,34 @@ def _material_question(case,snapshot,navigate):
         try: answer_case_question(case,q.id,'Unknown' if unknown else choice or '',explanation)
         except ValueError as error: st.warning(str(error))
         else: navigate(st.session_state.view)
+
+
+def _preliminary_findings(case, snapshot, plan):
+    st.subheader('Overall preliminary assessment' if not plan.questions else 'Preliminary findings so far')
+    st.caption('Significance before safeguards; these findings do not determine final residual acceptability.')
+    for threat in snapshot.threats:
+        result = preliminary_assessment(case, snapshot, threat, plan)
+        st.write(f'**{threat.kind} involving {_actor(case,threat.subject)} — {result.significance}**')
+        if not plan.questions:
+            st.write(threat.mechanism)
+            # The complete factors remain available below without repeating
+            # every source paragraph in the main reading path.
+            for text in result.factors[:2]: st.write(text)
+        if result.gaps:
+            st.caption(f'{len(result.gaps)} material uncertainty or qualification(s) remain; see supporting reasoning.')
+        with st.expander(f'Supporting evidence and preliminary reasoning — {threat.kind} / {_actor(case,threat.subject)}'):
+            for text in result.factors: st.write(text)
+            for gap in result.gaps: st.write(gap)
+            for fid in threat.evidence_ids:
+                fact=next((f for f in case.facts if f.id==fid),None)
+                if fact:
+                    st.text(f'{_actor(case,fact.subject)}: {fact.value}')
+                    if fact.excerpt: st.text(f'Source: {fact.excerpt}')
+            st.write(result.third_party)
+    if not snapshot.threats:
+        st.info('There is not enough supported information for a threat-specific evaluation, or no particular threat has been identified within these rules. This is not clearance to proceed.')
+    for text in snapshot.interactions: st.write(text)
+    st.caption('The reasonable and informed third party test asks how a reasonable person informed of the relevant circumstances would assess their influence on professional judgment. This is a conditional perspective, not an actual independent review.')
 
 
 def _action_editor(case,snapshot,navigate,*,expanded=False):
@@ -304,26 +350,11 @@ def render_case(assessment,navigate):
     elif stage=='case_evaluate':
         st.header('Step 2: Identify & Evaluate Threats')
         st.write('Explore the possible influences on your judgment and how significant they are. A potential threat is not proven bias or misconduct.')
-        _material_question(case,snapshot,navigate)
-        st.subheader('Your current assessment')
-        for evaluation in snapshot.evaluations:
-            threat=next(t for t in snapshot.threats if t.id==evaluation.threat_id)
-            st.subheader(f'{threat.kind} involving {_actor(case,threat.subject)}')
-            st.write(f'**{evaluation.outcome}** — conditional on the recorded account.')
-            st.write(threat.mechanism)
-            for text in evaluation.reasoning:
-                if text!=threat.mechanism: st.write(text)
-            for gap in evaluation.material_gaps: st.caption(gap)
-            with st.expander('Scenario evidence and third party reasoning'):
-                for fid in threat.evidence_ids:
-                    fact=next((f for f in case.facts if f.id==fid),None)
-                    if fact:
-                        st.text(f'{_actor(case,fact.subject)}: {fact.value}')
-                        if fact.excerpt: st.text(f'Source: {fact.excerpt}')
-                st.write(evaluation.third_party)
-        if not snapshot.evaluations: st.info('There is not enough supported information for a threat-specific evaluation, or no particular threat has been identified within these rules. This is not clearance to proceed.')
-        for text in snapshot.interactions: st.write(text)
-        st.caption('The reasonable and informed third party test asks whether a reasonable person who knows the relevant facts could conclude that Objectivity is appropriately protected. No actual third party has reviewed this assessment.')
+        plan=plan_questions(case,snapshot)
+        _material_question(case,snapshot,navigate,plan)
+        _preliminary_findings(case,snapshot,plan)
+        if plan.questions:
+            st.caption('If you continue to existing actions now, unanswered material questions remain unresolved in the assessment and report.')
         if st.button('Review existing actions',type='primary'): navigate('case_address')
         if st.button('Review scenario summary'): navigate('identify')
         _facts(case,navigate)

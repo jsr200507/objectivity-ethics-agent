@@ -176,7 +176,8 @@ class RefinedAddressReportTests(unittest.TestCase):
         review_case(case)
         second = build_case_report(case)
         self.assertNotIn('No additional safeguards are indicated', second)
-        self.assertIn('Acceptability not established', second)
+        self.assertIn('Significance remains uncertain', second)
+        self.assertIn('Insufficient information to establish acceptability', second)
         self.assertIn('No additional safeguards are indicated', first)
         self.assertTrue(case.fact_history)
 

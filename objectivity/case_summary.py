@@ -29,6 +29,10 @@ _UNCERTAINTY_LABELS = {
     "commercial_dependence": "The extent of commercial dependence",
     "work_changed": "Whether work has already changed in response to influence",
     "prior_work_affected": "Whether earlier work was affected",
+    "financing_consequences": "Possible financing or loan covenant consequences",
+    "pressure_authority": "Authority or influence over your work or career",
+    "challenge_safety": "Ability to challenge or escalate without adverse consequences",
+    "work_change_details": "The aspects of work reported as changed",
 }
 
 

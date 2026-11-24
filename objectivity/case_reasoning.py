@@ -171,11 +171,13 @@ def reason_case(case: CaseState) -> ReasoningSnapshot:
                 old.subject, old.object_id, old.decision_id,
                 _unique((*old.depends_on, *dependency_ids)),
                 _unique((*old.threat_ids, threat.id)), min(old.priority, priority),
+                old.phase,
             )
         else:
             questions[qid] = MaterialQuestion(
                 qid, prompt, options, why, impact, predicate, subject, object_id,
                 threat.decision_id, _unique(dependency_ids), (threat.id,), priority,
+                "evaluate" if predicate in {"work_changed", "prior_work_affected", "commercial_dependence"} else "identify",
             )
 
     def append(kind, source, mechanism, extras=(), uncertainty=(), subject=None):
@@ -450,6 +452,6 @@ def reason_case(case: CaseState) -> ReasoningSnapshot:
             continue
         relevant.append(MaterialQuestion(question.id, question.prompt, question.options, question.why,
             question.impact, question.predicate, question.subject, question.object_id, question.decision_id,
-            question.depends_on, current, question.priority))
+            question.depends_on, current, question.priority, question.phase))
     ordered = tuple(sorted(relevant, key=lambda q: (q.priority, q.predicate != "decision", q.id)))
     return ReasoningSnapshot(tuple(threats), tuple(evaluations), ordered, _unique(interactions), _unique(limitations))

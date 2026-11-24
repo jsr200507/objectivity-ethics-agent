@@ -12,6 +12,7 @@ PREDICATES = (
     "employment", "interest", "pressure", "self_review", "advocacy", "participation",
     "decision_responsibility", "relationship_active", "interest_connection", "commercial_dependence",
     "work_changed", "prior_work_affected", "claim", "assurance", "context",
+    "financing_consequences", "pressure_authority", "challenge_safety", "work_change_details",
 )
 FACT_STATUSES = ("reported", "unknown", "disputed", "withdrawn", "denied")
 SOURCES = ("scenario", "user", "legacy")
@@ -125,6 +126,7 @@ class MaterialQuestion:
     depends_on: tuple[str, ...] = ()
     threat_ids: tuple[str, ...] = ()
     priority: int = 2  # Ordering of questions, never an ethics/risk score.
+    phase: str = "identify"  # Transient question metadata; old constructors remain valid.
 
 @dataclass(frozen=True)
 class ThreatEvaluation:

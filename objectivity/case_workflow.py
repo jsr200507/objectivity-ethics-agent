@@ -12,6 +12,7 @@ _SINGLE_VALUE = frozenset({
     'role', 'decision', 'participation', 'decision_responsibility',
     'relationship_active', 'interest_connection', 'commercial_dependence',
     'work_changed', 'prior_work_affected',
+    'financing_consequences', 'pressure_authority', 'challenge_safety', 'work_change_details',
 })
 
 
@@ -63,9 +64,10 @@ def sync_case(case: CaseState) -> tuple[str, ...]:
 
 
 def answer_case_question(case: CaseState, question_id: str, choice: str, explanation: str = '') -> None:
-    from .case_reasoning import reason_case, facts_signature
+    from .case_reasoning import facts_signature
+    from .case_questions import plan_questions
     sync_case(case)
-    questions = {q.id: q for q in reason_case(case).questions}
+    questions = {q.id: q for q in plan_questions(case).questions}
     if question_id not in questions:
         raise ValueError('Choose the currently relevant clarification.')
     q = questions[question_id]
