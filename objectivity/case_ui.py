@@ -171,8 +171,7 @@ def _material_question(case,snapshot,navigate,plan):
         with st.container(border=True):
             with st.form(_key('material_question')):
                 if q.options:
-                    options = q.options if 'Unknown' in q.options else (*q.options, 'Unknown')
-                    choice = st.radio(q.prompt, options, index=None, key=_key('material_choice'))
+                    choice = st.radio(q.prompt, q.options, index=None, key=_key('material_choice'))
                 else:
                     choice = st.text_input(q.prompt, max_chars=100_000)
                 st.markdown('**Why we are asking**')
@@ -181,7 +180,7 @@ def _material_question(case,snapshot,navigate,plan):
                 st.write(q.impact)
                 explanation = st.text_area('Additional explanation (optional)', max_chars=45_000)
                 submit = st.form_submit_button('Record answer and continue', type='primary')
-                unknown = st.form_submit_button('I do not know') if not q.options else False
+                unknown = st.form_submit_button('I do not know') if q.options and 'Unknown' not in q.options or not q.options else False
             if submit or unknown:
                 try:
                     answer_case_question(case, q.id, 'Unknown' if unknown else choice or '', explanation)
