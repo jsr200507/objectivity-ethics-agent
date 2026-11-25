@@ -6,6 +6,7 @@ Only recorded typed facts close questions; optional explanations are not parsed.
 """
 from dataclasses import dataclass
 import hashlib
+import re
 
 from .case_model import (
     CAREER_CONDITION, CAREER_EXPECTATION, CAREER_FACTOR,
@@ -68,6 +69,43 @@ def _personal_career_incentive(source):
     return source.subject == 'user' and any(term in source.value.casefold() for term in (
         'promotion', 'career', 'job security', 'demotion', 'dismissal',
     ))
+
+
+def _provider_work_link(facts, actors, employer_id, decision_id):
+    """Find reported user review of this employer's work, including explicit apposition.
+
+    A generic external firm is not assumed to be the relative's employer. Only
+    the same source excerpt identifying that firm as the named employer can
+    establish the alias for follow-up planning; source corrections still apply.
+    """
+    employer = actors.get(employer_id)
+    if employer is None or employer.kind not in {'organisation', 'organization'}:
+        return None
+    named = re.escape(employer.label)
+    provider_position = (
+        r'\b(?:valuations?|estimates?|reports?|work|assessment)\s+'
+        r'(?:(?:that|which)\s+)?(?:(?:was|is|has\s+been)\s+)?'
+        r'(?:(?:prepared|provided|produced|issued|performed|carried\s+out)\s+by|by|from)\s+'
+        r'(?:(?:a|an|the|our|my|your)\s+)?'
+    )
+    valuation_firm = r'(?:external|independent)\s+valuation\s+firm'
+    apposition = re.compile(
+        provider_position + rf'(?:{valuation_firm}\s*,\s*{named}\b'
+        rf'|{named}\s*,\s*(?:an?\s+)?{valuation_firm}\b)',
+        re.I,
+    )
+    for fact in facts:
+        if (fact.predicate != 'professional_relationship' or fact.subject != 'user'
+                or fact.decision_id != decision_id or not _affirmed(fact)):
+            continue
+        if fact.object_id == employer_id:
+            return fact
+        provider = actors.get(fact.object_id)
+        if (fact.source == 'scenario' and provider and provider.label.casefold() in {
+                'external valuation firm', 'independent valuation firm', 'valuation firm'}
+                and apposition.search(fact.excerpt)):
+            return fact
+    return None
 
 
 def plan_questions(case: CaseState, snapshot: ReasoningSnapshot | None = None) -> QuestionPlan:
@@ -135,9 +173,8 @@ def plan_questions(case: CaseState, snapshot: ReasoningSnapshot | None = None) -
             employment = next((f for f in facts if f.id in threat.evidence_ids and f.predicate == 'employment'), None)
             if employment:
                 participation = known('participation', source.object_id, employment.object_id, threat.decision_id)
-                provider_work = known('professional_relationship', source.subject, employment.object_id, threat.decision_id)
-                linked_provider = (provider_work is not None and provider_work.object_id == employment.object_id
-                                   and _affirmed(provider_work))
+                provider_work = _provider_work_link(facts, actors, employment.object_id, threat.decision_id)
+                linked_provider = provider_work is not None
                 if participation is not None and (_is_yes(participation) or linked_provider):
                     add(threat, 'familiarity_contact', source.object_id, source.subject,
                         f'What contact have you had with {name} about “{activity}” or its outcome?',
