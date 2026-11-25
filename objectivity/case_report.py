@@ -11,6 +11,7 @@ from .case_model import CaseFact, CaseState, ReasoningSnapshot
 from .case_reasoning import ACCEPTABLE, reason_case
 from .case_questions import plan_questions
 from .case_preliminary import QUESTION_LABELS, preliminary_assessment
+from .case_summary import presentation_parties
 
 
 _SOURCE_WORDING = {
@@ -208,7 +209,8 @@ def build_case_report(case: CaseState) -> str:
             "Professional activity: " + _decision(case),
             "Recorded parties: " + "; ".join(
                 f"{actor.label} ({actor.role})" if actor.role and actor.role.casefold() != actor.label.casefold() else actor.label
-                for actor in case.actors
+                for actor in (next((a for a in case.actors if a.id == 'user'), None), *presentation_parties(case))
+                if actor is not None
             ) if case.actors else "Relevant parties: not established.",
         ]), "",
         "## 2. Threat-by-Threat Assessment", "",
@@ -229,7 +231,8 @@ def build_case_report(case: CaseState) -> str:
             speaker = fact.attribution if fact.attribution in {actor.id for actor in case.actors} else fact.subject
             same_wording = fact.excerpt.strip().rstrip('.').casefold() == fact.value.strip().rstrip('.').casefold()
             value = fact.excerpt if fact.source == "scenario" and same_wording else fact.value
-            detail = _label(case, speaker) + ": " + value
+            source_label = _label(case, speaker)
+            detail = ("Unattributed reported claim: " if source_label == "Reported claimant" else source_label + ": ") + value
             qualification = "reported claim, not verified evidence" if fact.predicate == "claim" else _fact_status(fact)
             lines += ["- " + _escaped(detail) + " — " + _escaped(qualification), ""]
             if fact.excerpt and not same_wording:

@@ -45,6 +45,42 @@ class CaseSummaryTests(unittest.TestCase):
         self.assertNotIn("Source account:", text)
         self.assertNotRegex(text, r"\b(?:fact|answer|question)[_-][a-f0-9]+")
 
+    def test_explicit_external_firm_apposition_deduplicates_only_display_parties(self):
+        scenario = (
+            'I review a property valuation prepared by an external valuation firm, Cedar Valuations. '
+            'My brother works for Cedar Valuations. '
+            'The valuation relies on an estimated property value.'
+        )
+        case = start_case(scenario)
+        original = deepcopy(case)
+        people = " ".join(section(case, TITLES[1]).items)
+        self.assertIn('Cedar Valuations', people)
+        self.assertNotIn('External valuation firm;', people)
+        self.assertNotIn('Reported claimant', people)
+        self.assertEqual(case, original)
+
+    def test_separate_provider_or_unlinked_generic_is_not_hidden(self):
+        scenario = (
+            'I review a valuation prepared by an external valuation firm. '
+            'My brother works for Cedar Valuations.'
+        )
+        case = start_case(scenario)
+        people = " ".join(section(case, TITLES[1]).items)
+        self.assertIn('External valuation firm', people)
+        self.assertIn('Cedar Valuations', people)
+
+    def test_two_explicitly_different_firms_are_not_conflated(self):
+        scenario = (
+            'I review a valuation prepared by an external valuation firm, Oak Valuations, '
+            'and another report from an independent valuation firm, Cedar Valuations. '
+            'My brother works for Cedar Valuations.'
+        )
+        case = start_case(scenario)
+        people = " ".join(section(case, TITLES[1]).items)
+        self.assertIn('Oak Valuations', people)
+        self.assertIn('Cedar Valuations', people)
+        self.assertTrue(any(a.label == 'External valuation firm' for a in case.actors))
+
     def test_inventory_keeps_actual_beneficiaries_pressure_recipient_and_claim_uncertainty(self):
         case = start_case(FULL_INVENTORY)
         interests = " ".join(section(case, TITLES[2]).items)
