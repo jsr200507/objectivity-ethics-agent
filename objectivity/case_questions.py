@@ -82,9 +82,16 @@ def _provider_work_link(facts, actors, employer_id, decision_id):
     if employer is None or employer.kind not in {'organisation', 'organization'}:
         return None
     named = re.escape(employer.label)
+    provider_position = (
+        r'\b(?:valuations?|estimates?|reports?|work|assessment)\s+'
+        r'(?:(?:that|which)\s+)?(?:(?:was|is|has\s+been)\s+)?'
+        r'(?:(?:prepared|provided|produced|issued|performed|carried\s+out)\s+by|by|from)\s+'
+        r'(?:(?:a|an|the|our|my|your)\s+)?'
+    )
+    valuation_firm = r'(?:external|independent)\s+valuation\s+firm'
     apposition = re.compile(
-        rf'\b(?:external|independent)\s+valuation\s+firm\s*,\s*{named}\b'
-        rf'|\b{named}\s*,\s*(?:an?\s+)?(?:external|independent)\s+valuation\s+firm\b',
+        provider_position + rf'(?:{valuation_firm}\s*,\s*{named}\b'
+        rf'|{named}\s*,\s*(?:an?\s+)?{valuation_firm}\b)',
         re.I,
     )
     for fact in facts:
@@ -94,7 +101,7 @@ def _provider_work_link(facts, actors, employer_id, decision_id):
         if fact.object_id == employer_id:
             return fact
         provider = actors.get(fact.object_id)
-        if (provider and provider.label.casefold() in {
+        if (fact.source == 'scenario' and provider and provider.label.casefold() in {
                 'external valuation firm', 'independent valuation firm', 'valuation firm'}
                 and apposition.search(fact.excerpt)):
             return fact

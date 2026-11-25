@@ -371,6 +371,22 @@ class Step2FamilyAndCareerTests(unittest.TestCase):
         )
         self.assertNotIn('familiarity_contact', [q.predicate for q in plan_questions(case).questions])
 
+    def test_explicitly_excluded_employer_apposition_does_not_trigger_contact(self):
+        case = start_case(
+            'I am responsible for reviewing a property valuation prepared by an external valuation firm other than '
+            'Cedar Valuations, an independent valuation firm. My brother works for Cedar Valuations. '
+            'I do not know whether he participated in preparing the valuation.'
+        )
+        self.assertNotIn('familiarity_contact', [q.predicate for q in plan_questions(case).questions])
+
+    def test_employer_apposition_in_a_separate_clause_does_not_trigger_contact(self):
+        case = start_case(
+            'I am responsible for reviewing a property valuation prepared by an external valuation firm, Oak Valuations, '
+            'and I previously worked with Cedar Valuations, an independent valuation firm. '
+            'My brother works for Cedar Valuations. I do not know whether he participated in preparing the valuation.'
+        )
+        self.assertNotIn('familiarity_contact', [q.predicate for q in plan_questions(case).questions])
+
     def test_contact_is_conditional_on_a_scoped_identification_answer(self):
         scenario = PROPERTY_COMPARISON.replace(' You do not know whether he participated in the valuation.', '')
         for choice in ('Yes', 'No', 'Unknown'):
@@ -793,15 +809,22 @@ class Step2StreamlitTests(unittest.TestCase):
         text = self.ui.main_text_without_expanders()
         threats = self.ui.reasoning().threats
         self.assertEqual(len(threats), expected_groups)
-        for threat in threats:
-            self.assertIn(threat.kind, text)
         plan = plan_questions(self.ui.case())
+        previews = [item for item in self.ui.app.expander if item.label == 'Preview provisional assessment (optional)']
+        findings_text = self.ui.text() if plan.questions else text
+        for threat in threats:
+            self.assertIn(threat.kind, findings_text)
         if plan.questions:
+            self.assertEqual(len(previews), 1)
+            self.assertIn('Overall preliminary assessment', findings_text)
+            self.assertNotIn('Overall preliminary assessment', text)
             current = plan.questions[0]
             stage = 'STAGE 1 — IDENTIFY' if current.phase == 'identify' else 'STAGE 2 — EVALUATE'
             self.assertIn(stage, text)
             self.assertIn('Current question:', self.ui.text())
         else:
+            self.assertFalse(previews)
+            self.assertIn('Overall preliminary assessment', text)
             self.assertIn('All selected clarification questions have been answered', self.ui.text())
         self.assertLessEqual(len(self.ui.app.radio), 1)
 
