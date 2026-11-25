@@ -13,7 +13,14 @@ PREDICATES = (
     "decision_responsibility", "relationship_active", "interest_connection", "commercial_dependence",
     "work_changed", "prior_work_affected", "claim", "assurance", "context",
     "financing_consequences", "pressure_authority", "challenge_safety", "work_change_details",
+    "familiarity_contact", "career_incentive_basis",
 )
+SUBSTANTIVE_CONTACT = "Discussed assumptions, findings or the outcome"
+ROUTINE_CONTACT = "Routine updates only"
+NO_WORK_CONTACT = "No contact about the work"
+CAREER_CONDITION = "An explicit condition was communicated"
+CAREER_FACTOR = "Communicated as one factor"
+CAREER_EXPECTATION = "My expectation only"
 FACT_STATUSES = ("reported", "unknown", "disputed", "withdrawn", "denied")
 SOURCES = ("scenario", "user", "legacy")
 ACTION_KINDS = ("independent_review", "eliminate", "remove_from_decision", "escalate", "disclose", "document", "decline", "none", "other")

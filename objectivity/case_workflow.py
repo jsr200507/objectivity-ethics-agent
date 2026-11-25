@@ -13,6 +13,7 @@ _SINGLE_VALUE = frozenset({
     'relationship_active', 'interest_connection', 'commercial_dependence',
     'work_changed', 'prior_work_affected',
     'financing_consequences', 'pressure_authority', 'challenge_safety', 'work_change_details',
+    'familiarity_contact', 'career_incentive_basis',
 })
 
 

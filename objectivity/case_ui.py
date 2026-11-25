@@ -3,7 +3,7 @@ import streamlit as st
 
 from .case_model import ACTION_KINDS, ACTION_STAGES, PREDICATES, CaseHistory
 from .case_reasoning import reason_case
-from .case_questions import MAX_STEP2_QUESTIONS, plan_questions
+from .case_questions import FOLLOW_UP_OPTIONS, MAX_STEP2_QUESTIONS, plan_questions
 from .case_preliminary import QUESTION_LABELS, preliminary_assessment
 from .case_workflow import (
     add_case_actor, add_case_fact, answer_action_question, answer_case_question,
@@ -62,8 +62,13 @@ def _facts(case, navigate):
                 format_func=lambda id: next(f'{_LABELS.get(f.predicate,"Reported information")} — {_actor(case,f.subject)}: {f.value[:75]}' for f in active if f.id == id),
                 key=_key('edit_fact'))
             fact = next(f for f in active if f.id == selected)
+            choices = FOLLOW_UP_OPTIONS.get(fact.predicate)
             with st.form(_key('correct_fact')):
-                value = st.text_area('Corrected detail', value=fact.value, max_chars=100_000)
+                if choices:
+                    index = choices.index(fact.value) if fact.value in choices else None
+                    value = st.selectbox('Corrected detail', choices, index=index)
+                else:
+                    value = st.text_area('Corrected detail', value=fact.value, max_chars=100_000)
                 status = st.selectbox('Evidence status', list(_STATUS_LABELS), index=list(_STATUS_LABELS).index(fact.status), format_func=_STATUS_LABELS.get)
                 subject = st.selectbox('Who does this information concern?', [a.id for a in case.actors],
                     index=[a.id for a in case.actors].index(fact.subject), format_func=lambda id:_actor(case,id))
@@ -72,6 +77,8 @@ def _facts(case, navigate):
                                        format_func=lambda id:_actor(case,id) if id else 'No related party specified')
                 save = st.form_submit_button('Save correction and reassess')
             if save:
+                if choices and value == 'Unknown' and status == 'reported':
+                    status = 'unknown'
                 try:
                     edit_case_fact(case, fact.id, 'Unknown' if status=='unknown' else value, status, subject=subject, object_id=related)
                 except ValueError as error: st.warning(str(error))

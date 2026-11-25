@@ -2,7 +2,11 @@
 from dataclasses import dataclass
 import re
 
-from .case_questions import plan_questions
+from .case_model import (
+    CAREER_CONDITION, CAREER_EXPECTATION, CAREER_FACTOR,
+    NO_WORK_CONTACT, ROUTINE_CONTACT, SUBSTANTIVE_CONTACT,
+)
+from .case_questions import _personal_career_incentive, plan_questions
 from .case_reasoning import ACCEPTABLE, ACTION_REQUIRED, _is_no, _is_yes, _live, _lookup, _unknown
 
 QUESTION_LABELS = {
@@ -10,6 +14,39 @@ QUESTION_LABELS = {
     'pressure_authority': 'Authority or influence over your work or career',
     'challenge_safety': 'Ability to challenge or escalate without adverse consequences',
     'work_change_details': 'Aspects of work reported as changed',
+    'familiarity_contact': 'Contact about the work',
+    'career_incentive_basis': 'Basis for the reported career incentive',
+}
+
+_FOLLOW_UP_FINDINGS = {
+    'familiarity_contact': {
+        SUBSTANTIVE_CONTACT: (
+            'Potentially heightened familiarity influence',
+            'The reported discussion creates a direct way for the relationship to affect scrutiny of the work. The relative’s role in preparing or controlling it still depends on the separate evidence.',
+        ),
+        ROUTINE_CONTACT: (
+            'Work-related contact factor narrowed',
+            'Routine updates suggest limited contact on this work. The ongoing relationship and any separate involvement still matter.',
+        ),
+        NO_WORK_CONTACT: (
+            'Work-related contact factor narrowed',
+            'The account indicates no work-related contact with this person. Possible influence through the relationship or their role in the work remains a separate consideration.',
+        ),
+    },
+    'career_incentive_basis': {
+        CAREER_CONDITION: (
+            'Potentially heightened career incentive',
+            'A communicated condition can make the career incentive more immediate. The reported condition provides no independent confirmation of a career outcome.',
+        ),
+        CAREER_FACTOR: (
+            'Career incentive reported as one factor',
+            'The reported link can influence professional judgment even where several factors determine the career outcome.',
+        ),
+        CAREER_EXPECTATION: (
+            'Career expectation reported',
+            'A personal expectation can still incline the professional toward a favourable outcome.',
+        ),
+    },
 }
 
 
@@ -124,23 +161,38 @@ def preliminary_assessment(case, snapshot, threat, plan=None):
     relevant = []
     if threat.kind == 'Self-interest' and source:
         relevant.append(('financing_consequences', source.subject, source.object_id))
+        if _personal_career_incentive(source):
+            relevant.append(('career_incentive_basis', source.subject, source.object_id))
+    elif threat.kind == 'Familiarity' and source:
+        relevant.append(('familiarity_contact', source.object_id, source.subject))
     elif threat.kind == 'Intimidation':
         relevant.extend((('pressure_authority', threat.subject, 'user'),
                          ('challenge_safety', 'user', threat.subject),
                          ('work_change_details', 'user', threat.subject)))
     new_factors = []
+    follow_up = None
+    has_follow_up = False
     for predicate, subject, obj in relevant:
         fact = _lookup(facts, predicate, subject, obj, threat.decision_id)
         if fact is None:
             continue
         label = QUESTION_LABELS[predicate]
         attribution = _supplemental_attribution(case, fact)
+        interpretations = _FOLLOW_UP_FINDINGS.get(predicate)
+        if interpretations is not None:
+            has_follow_up = True
+            if fact.status == 'reported':
+                follow_up = interpretations.get(fact.value)
         if fact.excerpt:
             prefix = 'Additional reported explanation' if fact.source == 'user' else 'Reported source excerpt'
             new_factors.append(f'{prefix} — {attribution}, retained without automatic interpretation: ' + fact.excerpt)
         if _unknown(fact):
             gaps.append(f'{label} remains unknown or requires interpretation; no favourable circumstance is assumed.')
             continue
+        if interpretations is not None and follow_up is None:
+            gaps.append(f'{label} requires clarification before assessing its influence.')
+        elif predicate == 'career_incentive_basis' and fact.value == CAREER_EXPECTATION:
+            gaps.append('Whether any career condition was communicated and how the decision could affect the outcome remain unresolved.')
         text = f'{label} — {attribution}: {fact.value} (reported, not independently verified).'
         new_factors.append(text)
         if predicate == 'financing_consequences':
@@ -154,8 +206,15 @@ def preliminary_assessment(case, snapshot, threat, plan=None):
         if not q.threat_ids or threat.id in q.threat_ids:
             prefix = 'Question limit leaves unresolved: ' if q in plan.deferred else 'Unresolved: '
             gaps.append(prefix + q.prompt)
+            has_follow_up |= q.predicate in _FOLLOW_UP_FINDINGS
     significance, supplemental_reasons = _supplemental_significance(case, threat, source, facts, evaluation, gaps, significance)
     factors.extend(supplemental_reasons)
+    if has_follow_up and (evaluation is None or evaluation.outcome != ACCEPTABLE):
+        if follow_up:
+            significance = follow_up[0] + (' (material uncertainty remains)' if gaps else '')
+            factors.append(follow_up[1])
+        else:
+            significance = 'Significance remains uncertain'
     decision = _lookup(facts, 'decision', 'user', '', threat.decision_id)
     activity = decision.value.split(';', 1)[0] if decision and not _unknown(decision) else 'the professional judgment under consideration'
     perspective = (
