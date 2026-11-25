@@ -708,6 +708,10 @@ class LocalUnderstandingProvider:
                 action=CaseAction(_id('action','none',unit),'No relevant action reported as taken','none','Not Taken',source='scenario',excerpt=unit)
                 actions[action.id]=action
                 continue
+            # An undecided choice is not a proposed, requested or implemented action.
+            # Do not turn a menu of options into a specific safeguard record.
+            if re.match(r'\s*(?:I|you|we)\s+(?:(?:still|currently)\s+)?(?:need\s+to|have\s+to|must)\s+decide\s+whether\b', unit, re.I):
+                continue
             kind=''
             if re.search(r'\b(?:independent\s+review|review\s+by\s+(?:an?\s+)?independent|independent\s+(?:partner|reviewer)\b[^.!?]{0,50}\b(?:completed|reviewed|review))',unit,re.I):kind='independent_review'
             elif re.search(r'\b(?:removed\s+(?:me|you)\s+from\s+(?:the\s+)?decision|I\s+was\s+removed\s+from|I\s+have\s+withdrawn\s+from\s+the\s+decision)',unit,re.I):kind='remove_from_decision'
