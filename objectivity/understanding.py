@@ -398,6 +398,15 @@ def _directed_pressure(unit):
     return False
 
 
+def _undecided_action_choice(unit):
+    """No action inferred from a question listing options still to be decided."""
+    return bool(re.match(
+        r'\s*(?:I|you|we)\s+(?:(?:still|currently)\s+)?'
+        r'(?:need\s+to|have\s+to|must)\s+decide\s+whether\b',
+        unit, re.I,
+    ))
+
+
 def _stage(unit):
     if re.search(r"\b(?:not\s+(?:yet\s+)?(?:completed|implemented|carried\s+out)|still\s+(?:planned|pending)|proposed|plan(?:ned)?\s+to|intend\s+to|requested|asked\s+for|will\s+(?:arrange|request|review)|in\s+progress)\b", unit, re.I):
         return 'Planned'
@@ -710,7 +719,7 @@ class LocalUnderstandingProvider:
                 continue
             # An undecided choice is not a proposed, requested or implemented action.
             # Do not turn a menu of options into a specific safeguard record.
-            if re.match(r'\s*(?:I|you|we)\s+(?:(?:still|currently)\s+)?(?:need\s+to|have\s+to|must)\s+decide\s+whether\b', unit, re.I):
+            if _undecided_action_choice(unit):
                 continue
             kind=''
             if re.search(r'\b(?:independent\s+review|review\s+by\s+(?:an?\s+)?independent|independent\s+(?:partner|reviewer)\b[^.!?]{0,50}\b(?:completed|reviewed|review))',unit,re.I):kind='independent_review'
@@ -784,6 +793,7 @@ def validate_understanding(scenario, result):
         if not isinstance(candidate,CaseAction) or not re.fullmatch(r'[A-Za-z0-9_-]{1,100}',candidate.id) or candidate.id in ids:continue
         if candidate.kind not in ACTION_KINDS or candidate.stage not in ACTION_STAGES or candidate.actor_id not in seen or candidate.source!='scenario':continue
         if not isinstance(candidate.excerpt,str) or not candidate.excerpt or candidate.excerpt not in scenario:continue
+        if _undecided_action_choice(candidate.excerpt):continue
         item=deepcopy(candidate);item.reviewed=False;item.basis_signature='';item.threat_ids=();item.revision=0
         # A provider cannot claim unsupported implementation or effective checks.
         literal_stage=_stage(item.excerpt)
