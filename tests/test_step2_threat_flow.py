@@ -9,11 +9,14 @@ from objectivity.address import AddressState
 from objectivity.ai_understanding import AIUnderstandingError, parse_ai_understanding
 from objectivity.case_actions import assess_actions
 from objectivity.case_codec import case_from_dict, case_to_dict
-from objectivity.case_model import CaseActor, CaseFact, CaseState, MaterialQuestion
+from objectivity.case_model import (
+    CAREER_CONDITION, CAREER_EXPECTATION, NO_WORK_CONTACT, ROUTINE_CONTACT, SUBSTANTIVE_CONTACT,
+    CaseActor, CaseFact, CaseState, MaterialQuestion,
+)
 from objectivity.case_preliminary import preliminary_assessment
 from objectivity.case_questions import MAX_STEP2_QUESTIONS, plan_questions
 from objectivity.case_reasoning import reason_case
-from objectivity.case_report import build_case_report
+from objectivity.case_report import _escaped, build_case_report
 from objectivity.case_workflow import (
     add_case_fact, answer_case_question, edit_case_fact, review_case, start_case,
 )
@@ -23,6 +26,7 @@ from objectivity.review import ReviewState
 from tests.test_ai_understanding import fact as ai_fact, proposal
 from tests.test_authority_provider_context import SCENARIO
 from tests.test_case_actions import action, source_case
+from tests.test_property_comparison import PROPERTY_COMPARISON
 from tests import test_case_ui as ui_helpers
 
 PROPERTY_EMPLOYMENT = ui_helpers.PROPERTY_EMPLOYMENT
@@ -314,9 +318,132 @@ class Step2PersistenceAndReportTests(unittest.TestCase):
 
     def test_optional_ai_cannot_invent_structured_interview_answers(self):
         source = 'I review a valuation. The CFO asks me to accept it.'
-        raw = proposal(ai_fact('user', 'challenge_safety', 'review a valuation', source))
-        with self.assertRaises(AIUnderstandingError):
-            parse_ai_understanding(source, raw)
+        for predicate in ('challenge_safety', 'familiarity_contact', 'career_incentive_basis'):
+            with self.subTest(predicate=predicate), self.assertRaises(AIUnderstandingError):
+                parse_ai_understanding(source, proposal(ai_fact('user', predicate, 'review a valuation', source)))
+
+
+class Step2FamilyAndCareerTests(unittest.TestCase):
+    def question(self, case, predicate):
+        return next(q for q in plan_questions(case).questions if q.predicate == predicate)
+
+    def test_cedar_explores_two_distinct_influences_within_the_existing_budget(self):
+        case = start_case(PROPERTY_COMPARISON)
+        seen = run_interview(case, {'work_changed': 'Yes'})
+        self.assertEqual([q.predicate for q in seen], [
+            'career_incentive_basis', 'financing_consequences', 'familiarity_contact',
+            'pressure_authority', 'challenge_safety', 'work_changed', 'work_change_details',
+        ])
+        self.assertEqual(plan_questions(case).answered_count, MAX_STEP2_QUESTIONS)
+        self.assertFalse(plan_questions(case).questions or plan_questions(case).deferred)
+        self.assertEqual((seen[0].subject, seen[0].phase), ('user', 'evaluate'))
+        self.assertEqual((seen[2].subject, seen[2].phase), ('family_brother', 'evaluate'))
+        self.assertTrue(all('Unknown' in q.options and q.why and q.impact for q in seen))
+
+    def test_contact_is_conditional_on_a_scoped_identification_answer(self):
+        scenario = PROPERTY_COMPARISON.replace(' You do not know whether he participated in the valuation.', '')
+        for choice in ('Yes', 'No', 'Unknown'):
+            with self.subTest(choice=choice):
+                case = start_case(scenario)
+                participation = self.question(case, 'participation')
+                self.assertEqual(participation.phase, 'identify')
+                self.assertNotIn('familiarity_contact', [q.predicate for q in plan_questions(case).questions])
+                answer_case_question(case, participation.id, choice)
+                contact = self.question(case, 'familiarity_contact')
+                self.assertEqual(contact.phase, 'evaluate')
+                self.assertIn(case.answers[participation.id].fact_id, contact.depends_on)
+                self.assertNotIn('participation', [q.predicate for q in plan_questions(case).questions])
+
+    def test_directly_reported_contact_and_career_basis_are_reused(self):
+        for sentence, value in (
+            ('You discussed the valuation assumptions with your brother.', SUBSTANTIVE_CONTACT),
+            ('You exchanged only routine updates with your brother about the valuation.', ROUTINE_CONTACT),
+            ('You had no contact with your brother about the valuation.', NO_WORK_CONTACT),
+            ('You do not know whether you had any contact with your brother about the valuation.', 'Unknown'),
+        ):
+            with self.subTest(value=value):
+                scenario = PROPERTY_COMPARISON.replace('approving the valuation.',
+                    'approving the valuation under your written promotion criteria.') + ' ' + sentence
+                case = start_case(scenario)
+                facts = {fact.predicate: fact for fact in case.facts}
+                self.assertEqual(facts['familiarity_contact'].value, value)
+                self.assertEqual(facts['familiarity_contact'].excerpt, sentence)
+                self.assertEqual(facts['career_incentive_basis'].value, CAREER_CONDITION)
+                self.assertFalse({'familiarity_contact', 'career_incentive_basis', 'participation'}
+                                 & {q.predicate for q in plan_questions(case).questions})
+
+    def test_other_contact_does_not_close_the_valuation_question(self):
+        case = start_case(PROPERTY_COMPARISON + ' You discussed holiday plans with your brother.')
+        self.assertIn('your brother', self.question(case, 'familiarity_contact').prompt)
+
+    def test_unspecified_provider_does_not_bind_the_relatives_employer_to_the_decision(self):
+        case = start_case(PROPERTY_COMPARISON)
+        provider = next(f for f in case.facts if f.predicate == 'professional_relationship')
+        edit_case_fact(case, provider.id, provider.value, object_id='')
+        self.assertNotIn('familiarity_contact', [q.predicate for q in plan_questions(case).questions])
+
+    def test_career_depth_requires_a_reported_link_to_the_decision(self):
+        for choice in ('Yes', 'No', 'Unknown'):
+            with self.subTest(choice=choice):
+                case = start_case(PROPERTY_COMPARISON)
+                source = next(f for f in case.facts if f.predicate == 'interest_connection' and f.subject == 'user')
+                edit_case_fact(case, source.id, source.value, 'withdrawn')
+                link = self.question(case, 'interest_connection')
+                self.assertEqual(link.phase, 'identify')
+                self.assertNotIn('career_incentive_basis', [q.predicate for q in plan_questions(case).questions])
+                answer_case_question(case, link.id, choice)
+                self.assertEqual(any(q.predicate == 'career_incentive_basis' for q in plan_questions(case).questions),
+                                 choice == 'Yes')
+
+    def test_personal_career_follow_up_survives_a_manual_source_correction(self):
+        case = start_case(PROPERTY_COMPARISON)
+        interest = next(f for f in case.facts if f.predicate == 'interest' and f.subject == 'user')
+        edit_case_fact(case, interest.id, 'My promotion is tied to the valuation decision')
+        self.assertIn(interest.id, self.question(case, 'career_incentive_basis').depends_on)
+
+    def test_new_answers_change_preliminary_findings_and_report_with_same_engine_verdict(self):
+        case = start_case(PROPERTY_COMPARISON)
+        review_case(case)
+        snapshot = reason_case(case)
+        addressed = assess_actions(case, snapshot)
+        family = next(t for t in snapshot.threats if t.kind == 'Familiarity')
+        personal = next(t for t in snapshot.threats if t.kind == 'Self-interest' and t.subject == 'user')
+        self.assertEqual(preliminary_assessment(case, snapshot, personal).significance, 'Significance remains uncertain')
+        answer_case_question(case, self.question(case, 'career_incentive_basis').id, CAREER_CONDITION)
+        answer_case_question(case, self.question(case, 'familiarity_contact').id, SUBSTANTIVE_CONTACT, 'We discussed the rental assumptions.')
+        self.assertEqual(reason_case(case), snapshot)
+        self.assertEqual(assess_actions(case), addressed)
+        report = build_case_report(case)
+        self.assertIn(_escaped(addressed.conclusion), report)
+        evaluation_sections = re.findall(r'(?ms)^#### B\. EVALUATE\n(.*?)^#### C\. ADDRESS', report)
+        for threat in (family, personal):
+            result = preliminary_assessment(case, snapshot, threat)
+            section = evaluation_sections[snapshot.threats.index(threat)]
+            self.assertIn(_escaped(result.significance), section)
+            self.assertIn(_escaped(result.factors[-1]), section)
+        self.assertIn('You \\(concerning Your brother\\)', report)
+        self.assertIn('participated', report)
+
+    def test_new_unknown_and_correction_survive_portable_progress(self):
+        case = start_case(PROPERTY_COMPARISON)
+        review_case(case)
+        career = self.question(case, 'career_incentive_basis')
+        contact = self.question(case, 'familiarity_contact')
+        answer_case_question(case, career.id, CAREER_CONDITION)
+        answer_case_question(case, contact.id, 'Unknown', 'Correspondence is unavailable.')
+        edit_case_fact(case, case.answers[career.id].fact_id, CAREER_EXPECTATION)
+        review_case(case)
+        restored = import_progress(export_progress(Assessment(scenario=case.scenario, case_state=case),
+            ReviewState(), AddressState(), 'case_evaluate')).assessment.case_state
+        self.assertEqual(plan_questions(restored).answered_count, 2)
+        self.assertFalse({career.id, contact.id} & {q.id for q in plan_questions(restored).questions})
+        self.assertEqual(restored.answers[contact.id].choice, 'Unknown')
+        self.assertEqual(build_case_report(restored), build_case_report(case))
+        report = build_case_report(restored)
+        self.assertIn('Career expectation reported', report)
+        self.assertIn('Contact about the work remains unknown', report)
+        self.assertIn('Correspondence is unavailable', report)
+        self.assertNotIn('Potentially heightened career incentive', report)
 
 
 class Step2SupplementalEvaluationTests(unittest.TestCase):

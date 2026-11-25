@@ -9,7 +9,9 @@ import hashlib
 import re
 
 from .case_model import (
-    ACTION_KINDS, ACTION_STAGES, PREDICATES, CaseActor, CaseAction, CaseFact,
+    ACTION_KINDS, ACTION_STAGES, PREDICATES,
+    CAREER_CONDITION, CAREER_EXPECTATION, CAREER_FACTOR,
+    NO_WORK_CONTACT, ROUTINE_CONTACT, SUBSTANTIVE_CONTACT, CaseActor, CaseAction, CaseFact,
     UnderstandingResult,
 )
 from .extraction import MAX_SCENARIO_LENGTH, extract_context
@@ -225,6 +227,41 @@ def _decision_reference(text, decision):
     generic = set('this that with from into before after year financial statements company organisation organization external independent current professional decision activity reviewing review assessing assess preparing prepare evaluating evaluate comparing compare recommending recommend approving approve selecting select supervising supervise finalised finalized'.split())
     topics = set(re.findall(r'\b[a-z]{4,}\b', decision.casefold())) - generic
     return bool(topics & set(re.findall(r'\b[a-z]{4,}\b', text.casefold())))
+
+
+def _familiarity_contact(clause, relative, decision):
+    """Reuse direct reports of contact about the current work."""
+    party = rf'(?:my|your)\s+{re.escape(relative)}'
+    topic = r'(?P<work>[^.!?;]{1,180})'
+    for value, pattern in (
+        (SUBSTANTIVE_CONTACT, rf'(?:I|you)\s+(?:have\s+)?discussed\s+{topic}\s+with\s+{party}'),
+        (ROUTINE_CONTACT, rf'(?:I|you)\s+(?:have\s+)?exchanged\s+only\s+routine\s+updates\s+with\s+{party}\s+about\s+{topic}'),
+        (NO_WORK_CONTACT, rf'(?:I|you)\s+(?:have\s+)?had\s+no\s+contact\s+with\s+{party}\s+about\s+{topic}'),
+        ('Unknown', rf'(?:I|you)\s+(?:do\s+not|don[’\']t)\s+know\s+whether\s+(?:I|you)\s+had\s+(?:any\s+)?contact\s+with\s+{party}\s+about\s+{topic}'),
+    ):
+        match = re.fullmatch(pattern, clause.rstrip('.!?'), re.I)
+        if match and _decision_reference(match['work'], decision):
+            return value
+    return None
+
+
+def _career_incentive_basis(unit, start):
+    """Classify only an explicit account of how the career link was established."""
+    prefix = unit[:start]
+    if re.fullmatch(r'(?:I|you)\s+(?:expect|believe|think)\s+(?:that\s+)?(?:my|your)\s+', prefix, re.I):
+        return CAREER_EXPECTATION
+    communicated = re.fullmatch(
+        r'(?:I\s+was|you\s+were|(?:I|you)\s+have\s+been)\s+'
+        r'(?:(?:formally|explicitly)\s+)?(?:told|informed)\s+(?:that\s+)?(?:my|your)\s+', prefix, re.I,
+    )
+    condition = unit[start:]
+    written = re.search(r'\bunder\s+(?:my|your|the)\s+written\s+promotion\s+criteria\b', condition, re.I)
+    if communicated or written:
+        if re.search(r'\b(?:depends?\s+in\s+part|one\s+factor)\b', condition, re.I):
+            return CAREER_FACTOR
+        if re.search(r'\b(?:depends?\s+on|conditional\s+on|contingent\s+on|only\s+if)\b', condition, re.I):
+            return CAREER_CONDITION
+    return None
 
 
 def _reported_financing_denial(unit, finance):
@@ -577,6 +614,10 @@ class LocalUnderstandingProvider:
                 owner = owner_at(unit, career.start())
                 fact(owner,'interest','Promotion or career-related interest',unit,org,attribution=actors[owner].label)
                 fact(owner,'interest_connection',connection,unit,org,status='unknown' if connection=='Unknown' else 'reported')
+                if owner == 'user' and connection == 'Yes':
+                    basis = _career_incentive_basis(unit, career.start())
+                    if basis:
+                        fact(owner, 'career_incentive_basis', basis, unit, org, attribution=actors[owner].label)
             # Financing is the organisation's interest when an organisation is
             # explicitly mentioned. It is not assigned to the professional as
             # a personal loan or personal financial reward.
@@ -642,6 +683,10 @@ class LocalUnderstandingProvider:
             for relative,employer in employment.items():
                 relname=actors[relative].label.split()[-1]
                 for clause in participation_clauses:
+                    contact = _familiarity_contact(clause, relname, decision)
+                    if contact:
+                        fact(relative, 'familiarity_contact', contact, clause, 'user',
+                             status='unknown' if contact == 'Unknown' else 'reported', attribution='user')
                     person = re.search(r'\b'+re.escape(relname)+r'\b',clause,re.I)
                     if person and re.match(r"[’']s\s+(?!(?:participation|involvement|role)\b)", clause[person.end():], re.I):
                         person = None  # A relative's firm is not the relative.

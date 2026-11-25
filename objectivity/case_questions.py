@@ -7,9 +7,13 @@ Only recorded typed facts close questions; optional explanations are not parsed.
 from dataclasses import dataclass
 import hashlib
 
-from .case_model import CaseState, MaterialQuestion, ReasoningSnapshot
+from .case_model import (
+    CAREER_CONDITION, CAREER_EXPECTATION, CAREER_FACTOR,
+    NO_WORK_CONTACT, ROUTINE_CONTACT, SUBSTANTIVE_CONTACT,
+    CaseState, MaterialQuestion, ReasoningSnapshot,
+)
 from .case_reasoning import (
-    ACCEPTABLE, _NO_INVOLVEMENT, _is_yes, _live, _lookup, _question_id, reason_case,
+    ACCEPTABLE, _NO_INVOLVEMENT, _affirmed, _decision, _is_yes, _live, _lookup, _question_id, reason_case,
 )
 
 MAX_STEP2_QUESTIONS = 7
@@ -32,6 +36,10 @@ WORK_CHANGE_DETAILS = (
     "Investigation or evidence gathering", "Analysis or professional judgment",
     "Recommendation or conclusion", "Disclosure or escalation", "Several aspects", "Other", "Unknown",
 )
+FOLLOW_UP_OPTIONS = {
+    'familiarity_contact': (SUBSTANTIVE_CONTACT, ROUTINE_CONTACT, NO_WORK_CONTACT, 'Unknown'),
+    'career_incentive_basis': (CAREER_CONDITION, CAREER_FACTOR, CAREER_EXPECTATION, 'Unknown'),
+}
 
 
 @dataclass(frozen=True)
@@ -54,6 +62,12 @@ def _asked_ids(case):
     # reuses its slot; source edits cannot reset the seven-question budget.
     return {fact.id for fact in (*case.facts, *case.fact_history)
             if fact.source == 'user' and fact.id.startswith('answer-')}
+
+
+def _personal_career_incentive(source):
+    return source.subject == 'user' and any(term in source.value.casefold() for term in (
+        'promotion', 'career', 'job security', 'demotion', 'dismissal',
+    ))
 
 
 def plan_questions(case: CaseState, snapshot: ReasoningSnapshot | None = None) -> QuestionPlan:
@@ -97,6 +111,7 @@ def plan_questions(case: CaseState, snapshot: ReasoningSnapshot | None = None) -
             name = 'your ' + name[5:]
         elif party and party.role and party.role.casefold() == name.casefold():
             name = 'the ' + name
+        activity = _decision(facts, threat.decision_id)
         if threat.kind == 'Self-interest' and party and party.kind in {'organisation', 'organization'} and source.value == 'Organisational financing or loan covenant interest':
             connection = known('interest_connection', source.subject, source.object_id, threat.decision_id)
             decision = known('decision', 'user', '', threat.decision_id)
@@ -107,6 +122,29 @@ def plan_questions(case: CaseState, snapshot: ReasoningSnapshot | None = None) -
                 'The financing interest is reported, but its practical consequences have not been established.',
                 'A possible breach, renegotiation, extra security or different borrowing terms can strengthen the incentive to favour an outcome. These remain possibilities, not established results.',
                 'evaluate', (connection,))
+        elif threat.kind == 'Self-interest' and _personal_career_incentive(source):
+            connection = known('interest_connection', source.subject, source.object_id, threat.decision_id)
+            if _is_yes(connection):
+                add(threat, 'career_incentive_basis', source.subject, source.object_id,
+                    f'How was the reported link between your career prospects and “{activity}” established?',
+                    FOLLOW_UP_OPTIONS['career_incentive_basis'],
+                    'Your account links the decision to your career prospects. How that link was established affects the strength of the incentive.',
+                    'A communicated condition can make the incentive more immediate. A stated factor or personal expectation provides less certainty about its effect.',
+                    'evaluate', (connection,))
+        elif threat.kind == 'Familiarity':
+            employment = next((f for f in facts if f.id in threat.evidence_ids and f.predicate == 'employment'), None)
+            if employment:
+                participation = known('participation', source.object_id, employment.object_id, threat.decision_id)
+                provider_work = known('professional_relationship', source.subject, employment.object_id, threat.decision_id)
+                linked_provider = (provider_work is not None and provider_work.object_id == employment.object_id
+                                   and _affirmed(provider_work))
+                if participation is not None and (_is_yes(participation) or linked_provider):
+                    add(threat, 'familiarity_contact', source.object_id, source.subject,
+                        f'What contact have you had with {name} about “{activity}” or its outcome?',
+                        FOLLOW_UP_OPTIONS['familiarity_contact'],
+                        'Contact about the work can affect how freely you challenge it, even when the person’s formal involvement is unclear.',
+                        'Discussing the substance or outcome can increase the potential influence of the relationship. Routine updates or no contact narrow this channel of influence.',
+                        'evaluate', (provider_work,) if linked_provider else ())
         elif threat.kind == 'Intimidation':
             authority = known('pressure_authority', source.subject, 'user', threat.decision_id)
             add(threat, 'pressure_authority', source.subject, 'user',

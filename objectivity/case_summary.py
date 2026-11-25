@@ -33,6 +33,8 @@ _UNCERTAINTY_LABELS = {
     "pressure_authority": "Authority or influence over your work or career",
     "challenge_safety": "Ability to challenge or escalate without adverse consequences",
     "work_change_details": "The aspects of work reported as changed",
+    "familiarity_contact": "Contact about the work",
+    "career_incentive_basis": "How the career incentive was established",
 }
 
 

@@ -339,9 +339,11 @@ class ScenarioCaseAppTests(unittest.TestCase):
                 self.assertIn('- ' + detail, text)
         self.assertFalse(self.case().actions)
 
-    def test_recorded_unknown_participation_does_not_trigger_an_artificial_question(self):
+    def test_recorded_unknown_participation_leaves_only_the_distinct_contact_question(self):
         self.begin(PROPERTY_EMPLOYMENT)
         self.confirm_account()
+        self.assertEqual([q.predicate for q in self.reasoning().questions], ['familiarity_contact'])
+        self.answer_material('Unknown')
         self.assertFalse(self.reasoning().questions)
         self.assertFalse(self.app.radio)
         self.assertIn('Familiarity', self.text())
@@ -726,7 +728,9 @@ class ScenarioCaseAppTests(unittest.TestCase):
             self.assertFalse(second.exception)
             self.assertEqual(second.session_state['view'], 'case_evaluate')
             self.assertEqual(second.session_state['assessment'].case_state, saved.assessment.case_state)
-            self.assertFalse(second.radio, 'Reopening must not invent a question already recorded as Unknown')
+            self.assertEqual(len(second.radio), 1)
+            self.assertIn('What contact have you had', second.radio[0].label)
+            self.assertIsNone(second.radio[0].value)
 
 
 if __name__ == "__main__":

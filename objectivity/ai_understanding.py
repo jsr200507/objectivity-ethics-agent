@@ -24,7 +24,8 @@ class AIUnderstandingError(ValueError):
 _STATUS = {'reported', 'unknown', 'disputed', 'denied'}
 _DERIVED = {'participation', 'decision_responsibility', 'relationship_active', 'interest_connection',
             'commercial_dependence', 'work_changed', 'prior_work_affected',
-            'financing_consequences', 'pressure_authority', 'challenge_safety', 'work_change_details'}
+            'financing_consequences', 'pressure_authority', 'challenge_safety', 'work_change_details',
+            'familiarity_contact', 'career_incentive_basis'}
 _FAMILY = r'(?:brother|sister|father|mother|parent|son|daughter|child|spouse|wife|husband|cousin)'
 _FINANCIAL = re.compile(r'\b(?:bonus|commissions?|fees?|shares?|shareholding|equity|stock|salary|pay|financial|profit|revenue|loan|financing|funding|covenants?|contract|renewal|promotion|career|job\s+security|demotion|dismissal)\b', re.I)
 _UNCERTAIN = re.compile(r"\b(?:unknown|unclear|uncertain|unsure|not\s+known|do\s+not\s+know|don['’]t\s+know|cannot\s+establish|may\s+have|might\s+have|whether)\b", re.I)
