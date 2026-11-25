@@ -103,6 +103,11 @@ class AIUnderstandingTests(unittest.TestCase):
         self.assertIn('Do not evaluate ethics', system)
         self.assertIn('Unknown', system)
         self.assertIn('Do not output locally derived predicates', system)
+        allowed = system.split('Allowed fact types: ', 1)[1].split('. ', 1)[0].split(', ')
+        self.assertEqual(allowed, [
+            'role', 'decision', 'family_relationship', 'close_relationship', 'professional_relationship',
+            'employment', 'interest', 'pressure', 'self_review', 'advocacy', 'claim', 'assurance', 'context',
+        ])
         self.assertIn('Preserve quantitative details', system)
         self.assertIn('claim for a reported estimate', system)
 
@@ -157,6 +162,25 @@ class AIUnderstandingTests(unittest.TestCase):
         result = parse_ai_understanding(scenario, raw)
         self.assertTrue(any(f.predicate == 'participation' and f.status == 'unknown' for f in result.facts))
         self.assertFalse(any(f.status == 'verified' for f in result.facts))
+
+    def test_cedar_participation_remains_local_when_model_omits_derived_predicates(self):
+        employment = 'Your brother works for Cedar Valuations.'
+        uncertainty = 'You do not know whether he participated in the valuation.'
+        scenario = 'You review a property valuation prepared by Cedar Valuations. ' + employment + ' ' + uncertainty
+        grounded_employment = fact('Your brother', 'employment', 'works for Cedar Valuations',
+                                   employment, object='Cedar Valuations')
+        derived = fact('Your brother', 'participation', 'Unknown', uncertainty,
+                       object='Cedar Valuations', status='unknown')
+
+        with self.assertRaises(AIUnderstandingError):
+            parse_ai_understanding(scenario, proposal(grounded_employment, derived))
+
+        result = parse_ai_understanding(scenario, proposal(grounded_employment))
+        local = LocalUnderstandingProvider().understand(scenario)
+        participation = [f for f in result.facts if f.predicate == 'participation']
+        self.assertEqual(participation, [f for f in local.facts if f.predicate == 'participation'])
+        self.assertEqual([(f.subject, f.value, f.status) for f in participation],
+                         [('family_brother', 'Unknown', 'unknown')])
 
     def test_fabricated_source_excerpt_rejects_entire_proposal(self):
         raw = proposal(fact('user', 'interest', 'bonus', 'My bonus depends on profit.'))
