@@ -77,6 +77,30 @@ def _pressure_detail(fact: CaseFact) -> str:
     return _described(fact, text)
 
 
+def presentation_parties(case: CaseState):
+    """Display-only names; retain every original actor and evidence reference."""
+    original = [actor for actor in case.actors if actor.id != 'user']
+    synthetic = {'reported claimant'}  # A source placeholder, not an identified party.
+    generic = {'external valuation firm', 'independent valuation firm', 'valuation firm'}
+    provider_mentions = tuple(re.finditer(r'\b(?:external|independent)\s+valuation\s+firm\b', case.scenario, re.I))
+    named_organisations = [actor for actor in original
+                           if actor.kind in {'organisation', 'organization'}
+                           and actor.label.casefold() not in generic]
+    matched = []
+    for mention in provider_mentions:
+        following = case.scenario[mention.end():]
+        candidates = [actor for actor in named_organisations
+                      if re.match(r'\s*,\s*' + re.escape(actor.label) + r'\b', following, re.I)]
+        matched.append(candidates[0].id if len(candidates) == 1 else None)
+    # Multiple or ambiguous provider references must remain distinct.
+    alias_is_clear = bool(matched) and len(set(matched)) == 1 and matched[0] is not None
+    return tuple(
+        actor for actor in original
+        if actor.label.casefold() not in synthetic
+        and not (alias_is_clear and actor.label.casefold() in generic)
+    )
+
+
 def summarise_case(case: CaseState, snapshot: ReasoningSnapshot | None = None) -> tuple[SummarySection, ...]:
     """Return six bounded, editable-summary sections without mutating sources.
 
@@ -115,7 +139,7 @@ def summarise_case(case: CaseState, snapshot: ReasoningSnapshot | None = None) -
     # the normal item cap. Their polarity is stated before compacted detail.
     professional_items = tuple(dict.fromkeys(_compact(item) for item in restrictions)) + _items(professional)
 
-    party_names = [_compact(actor.label, 80) for actor in case.actors if actor.id != "user"]
+    party_names = [_compact(actor.label, 80) for actor in presentation_parties(case)]
     people = ["Relevant parties: " + "; ".join(party_names)] if party_names else []
     for fact in facts:
         if fact.predicate in {"close_relationship", "family_relationship", "professional_relationship"}:
@@ -169,7 +193,10 @@ def summarise_case(case: CaseState, snapshot: ReasoningSnapshot | None = None) -
         party = " — " + _label(case, question.subject) if question.subject != "user" else ""
         uncertainties.append(title + party + " needs clarification.")
     for fact in grouped.get("claim", []):
-        uncertainties.append(f"{_label(case, fact.subject)}'s claim remains unverified: {_described(fact)}")
+        if _label(case, fact.subject) == "Reported claimant":
+            uncertainties.append(f"Unattributed reported claim remains unverified: {_described(fact)}")
+        else:
+            uncertainties.append(f"{_label(case, fact.subject)}'s claim remains unverified: {_described(fact)}")
     if not uncertainties:
         uncertainties.append("No further material clarification is currently identified by these local rules. The account is not independently verified.")
 
