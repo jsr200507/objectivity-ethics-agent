@@ -368,8 +368,6 @@ def _recommendation_details(case, threat, actions):
     elif responsibility and responsibility.value == "I prepare or assess the work":
         remit += "Prepare the analysis for an authorised decision-maker rather than assuming power to change approval arrangements. "
         application.append("Prepare the analysis for an authorised decision-maker; do not assume authority to change approval arrangements.")
-    elif role:
-        application.append(f"Apply the response within your recorded role: {role.value}.")
 
     valuation = "valuation" in decision.casefold()
     review_scope = ("the valuation's assumptions, methods and supporting evidence" if valuation

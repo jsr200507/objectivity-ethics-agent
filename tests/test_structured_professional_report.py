@@ -208,6 +208,85 @@ class StructuredProfessionalReportTests(unittest.TestCase):
         self.assertIn('Annual bonus linked to valuation', report)
         self.assertEqual(len(reason_case(case).threats), 3)
 
+    def test_shared_literal_evidence_retains_all_parties_without_repeating_the_quote(self):
+        case = start_case(PROPERTY_COMPARISON)
+        run_interview(case); review_case(case)
+        report = build_case_report(case)
+        family = next(block for block in threat_blocks(report) if '— Familiarity' in block.splitlines()[0])
+        self.assertEqual(family.count('> Your brother works for Cedar Valuations\\.'), 1)
+        self.assertIn('Concerning You; Your brother', family)
+        self.assertIn('Explicitly unknown in the recorded account', family)
+        self.assertIn('You do not know whether he participated', family)
+        self.assertEqual(report.count('> Your promotion depends on approving the valuation\\.'), 1)
+        self.assertEqual(report.count("> Our company's refinancing depends on meeting a loan covenant based on the property value\\."), 1)
+
+    def test_shared_excerpt_does_not_collapse_distinct_evidence_statuses(self):
+        case = start_case(PROPERTY_COMPARISON)
+        employment = next(f for f in case.facts if f.predicate == 'employment')
+        participation = next(f for f in case.facts if f.predicate == 'participation')
+        # A reused source must not cause its separate Unknown record to vanish.
+        participation.excerpt = employment.excerpt
+        review_case(case)
+        family = next(block for block in threat_blocks(build_case_report(case)) if '— Familiarity' in block.splitlines()[0])
+        self.assertEqual(family.count('> Your brother works for Cedar Valuations\\.'), 2)
+        self.assertIn('not independently verified', family)
+        self.assertIn('Explicitly unknown in the recorded account', family)
+
+    def test_action_gap_is_not_repeated_as_an_identical_outstanding_concern(self):
+        case = property_case()
+        case.actions = [CaseAction('planned', 'Request independent review', 'independent_review', 'Planned',
+            threat_ids=tuple(t.id for t in reason_case(case).threats), reviewed=True)]
+        result = assess_actions(case)
+        for block, residual in zip(threat_blocks(build_case_report(case)), result.outcomes):
+            for gap in result.actions[0].gaps:
+                self.assertEqual(block.count(_escaped(gap)), 1)
+            for gap in residual.unknowns:
+                self.assertIn(_escaped(gap), block)
+
+    def test_case_application_omits_role_only_filler_without_losing_recorded_role(self):
+        case = property_case()
+        before = deepcopy(case)
+        result = assess_actions(case)
+        for recommendation in result.recommendations:
+            self.assertTrue(recommendation.application)
+            self.assertNotIn('Apply the response within your recorded role', ' '.join(recommendation.application))
+        self.assertIn('Risk and compliance analyst', build_case_report(case))
+        self.assertEqual(case, before)
+
+    def test_shared_text_preserves_a_distinct_reported_attribution(self):
+        case = start_case(PROPERTY_COMPARISON)
+        interest = next(f for f in case.facts if f.predicate == 'interest' and f.subject == 'user')
+        interest.attribution = 'investment director'
+        review_case(case)
+        block = threat_blocks(build_case_report(case))[0]
+        self.assertEqual(block.count('> Your promotion depends on approving the valuation\\.'), 2)
+        self.assertIn('attributed in the account to investment director', block)
+        self.assertIn('not independently verified', block)
+
+    def test_changed_work_caution_is_complete_without_repeating_equivalent_cautions(self):
+        case = property_case(pressure_authority='Both work and career influence', work_changed='Yes',
+                             work_change_details='Investigation or evidence gathering')
+        snapshot = reason_case(case)
+        threat = next(t for t in snapshot.threats if t.kind == 'Intimidation')
+        initial = preliminary_assessment(case, snapshot, threat)
+        block = next(b for b in threat_blocks(build_case_report(case)) if '— Intimidation' in b.splitlines()[0])
+        evaluate = block.split('#### B. EVALUATE')[1].split('#### C. ADDRESS')[0]
+        self.assertIn(_escaped(initial.significance), evaluate)
+        self.assertIn('A reported change to work indicates potentially heightened influence', evaluate)
+        self.assertIn('it does not establish technical error or misconduct', evaluate)
+        self.assertIn('Investigation or evidence gathering', evaluate)
+        self.assertNotIn('The reported change identifies work needing attention', evaluate)
+        self.assertNotIn('A change to work is reported', evaluate)
+
+    def test_scope_caveats_are_not_duplicated_as_case_specific_unknowns(self):
+        report = build_case_report(property_case(financing_consequences='Unknown'))
+        remaining = report.split('**Other uncertainties and limitations:**')[1].split('**Scope:**')[0]
+        self.assertIn('Possible financing or loan covenant consequences remains unknown', remaining)
+        self.assertNotIn('No facts or documents have been independently verified', remaining)
+        self.assertNotIn('does not certify compliance', remaining)
+        self.assertIn('It does not certify compliance', report.split('**Scope:**')[1])
+        self.assertIn('no independent fact verification', report.split('**Scope:**')[1])
+
 
 if __name__ == '__main__':
     unittest.main()

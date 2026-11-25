@@ -37,6 +37,16 @@ def _paragraphs(items) -> list[str]:
     return ["- " + _escaped(item) for item in dict.fromkeys(item for item in items if item)]
 
 
+def _report_factors(items):
+    """Avoid repeating authored work-change cautions already covered in full."""
+    complete = "A reported change to work indicates potentially heightened influence and calls for attention to the affected work; it does not establish technical error or misconduct."
+    redundant = {
+        "The reported change identifies work needing attention; it does not establish technical error, bias or misconduct.",
+        "A change to work is reported. The affected judgment and any correction need attention; this does not establish technical error or misconduct.",
+    }
+    return tuple(item for item in items if complete not in items or item not in redundant)
+
+
 def _label(case: CaseState, actor_id: str) -> str:
     actor = next((actor for actor in case.actors if actor.id == actor_id), None)
     return actor.label if actor else "An unspecified party"
@@ -238,24 +248,35 @@ def build_case_report(case: CaseState) -> str:
         lines += ["### " + _escaped(title), "", "#### A. IDENTIFY", "",
                   "**Source:** " + _escaped(_label(case, threat.subject)), "",
                   _escaped(threat.mechanism), ""]
-        shown_sources = set()
+        sources = {}
         for fid in threat.evidence_ids:
             fact = facts.get(fid)
             if fact is None:
                 continue
             value = (fact.excerpt or _structured_detail(fact)) if fact.source == "scenario" else _structured_detail(fact)
-            key = (fact.subject, fact.status, value)
-            if key in shown_sources:
-                continue
-            shown_sources.add(key)
-            lines += [f"**{_escaped(_label(case, fact.subject))} — {_escaped(_fact_status(fact))}:**", "", _quote(value), ""]
-            if fact.source != "scenario" and fact.excerpt and fact.excerpt != value:
-                lines += ["Earlier source wording, retained for context rather than confirmation of the correction:", "", _quote(fact.excerpt), ""]
+            correction = fact.excerpt if fact.source != "scenario" and fact.excerpt != value else ""
+            # One literal source may support several facts. Keep all parties and
+            # distinguish statuses, attribution and any earlier corrected source.
+            subject = _label(case, fact.subject)
+            attribution = fact.attribution
+            if attribution in {fact.subject, subject}:
+                attribution = ""  # The subject is already identified in this citation.
+            else:
+                attribution = next((actor.label for actor in case.actors if actor.id == attribution), attribution)
+            key = (value, _fact_status(fact), attribution, correction)
+            sources.setdefault(key, []).append(subject)
+        for (value, evidence_status, attribution, correction), parties in sources.items():
+            subjects = "; ".join(dict.fromkeys(parties))
+            if attribution:
+                evidence_status += "; attributed in the account to " + attribution
+            lines += [f"**Concerning {_escaped(subjects)} — {_escaped(evidence_status)}:**", "", _quote(value), ""]
+            if correction:
+                lines += ["Earlier source wording, retained for context rather than confirmation of the correction:", "", _quote(correction), ""]
         if threat.uncertainty:
             lines += ["**Identification limitations:**", "", *_paragraphs(threat.uncertainty), ""]
         lines += ["#### B. EVALUATE", "",
                   "**Preliminary significance before safeguards:** " + _escaped(preliminary.significance), "",
-                  "**Key reasons:**", "", *_paragraphs(preliminary.factors), ""]
+                  "**Key reasons:**", "", *_paragraphs(_report_factors(preliminary.factors)), ""]
         if preliminary.gaps:
             lines += ["**Material uncertainties and missing evidence:**", "", *_paragraphs(preliminary.gaps), ""]
             shown_gaps.update(preliminary.gaps)
@@ -280,9 +301,13 @@ def build_case_report(case: CaseState) -> str:
                 lines += ["No action has been recorded for this source. The finding rests on existing conditions, not an assumed completed safeguard.", ""]
             else:
                 lines += ["The account does not establish what relevant action has already been taken or proposed for this source. This does not mean that no action was taken.", ""]
+        action_gaps = set()
         for action in linked:
+            action_result = action_results.get(action.id)
             lines += _action_lines(case, action, action_results.get(action.id), labels,
                                    previously_shown=shown_actions.get(action.id, ""), optional=threat.id in acceptable_ids)
+            if action_result and threat.id not in acceptable_ids:
+                action_gaps.update(action_result.gaps)
             shown_actions.setdefault(action.id, f"Threat {number:02}")
         if residual:
             linked_reasons = {text for action in linked for text in getattr(action_results.get(action.id), "reasoning", ())}
@@ -290,9 +315,10 @@ def build_case_report(case: CaseState) -> str:
             reasons = [text for text in residual.reasoning if text not in linked_reasons | initial]
             if reasons:
                 lines += ["**Basis of the residual assessment:**", "", *_paragraphs(reasons), ""]
-            if residual.unknowns:
-                lines += ["**Outstanding concerns:**", "", *_paragraphs(residual.unknowns), ""]
-                shown_gaps.update(residual.unknowns)
+            outstanding = [text for text in residual.unknowns if text not in action_gaps]
+            if outstanding:
+                lines += ["**Outstanding concerns:**", "", *_paragraphs(outstanding), ""]
+            shown_gaps.update(residual.unknowns)
             lines += ["**Third-party perspective after recorded measures:** " + _escaped(residual.third_party), ""]
 
     unlinked = [action for action in case.actions if action.id not in shown_actions]
@@ -320,7 +346,12 @@ def build_case_report(case: CaseState) -> str:
         + ["Step 2 question limit leaves unresolved: " + question.prompt for question in plan.deferred]
         + list(addressed.unknowns) + list(snapshot.limitations) + list(case.limitations)
     ))
-    remaining = [text for text in uncertainties if text not in shown_gaps]
+    scope_repeated_below = {
+        "No facts or documents have been independently verified by this application.",
+        "This assessment concerns Objectivity only and does not certify compliance, establish misconduct or independently verify the account.",
+        "For audit work, separate audit-independence and other applicable professional requirements need their own assessment.",
+    }
+    remaining = [text for text in uncertainties if text not in shown_gaps | scope_repeated_below]
     if remaining:
         lines += ["**Other uncertainties and limitations:**", "", *_paragraphs(remaining), ""]
     if not case.reviewed:
@@ -328,6 +359,6 @@ def build_case_report(case: CaseState) -> str:
     if case.legacy_records:
         lines += ["Earlier source records and answer history remain in saved progress. Unmapped historical records are not current evidence or conclusions.", ""]
     lines += [
-        "**Scope:** Objectivity only; this assessment supports professional judgment. This application provides no independent fact verification, professional validation or certified ethical opinion. User confirmation and reported external checking are not verification performed by this application. Optional AI assistance cannot change the rule-based ethical findings or verify facts. Separate audit-independence and other applicable professional requirements need their own assessment.", "",
+        "**Scope:** Objectivity only; this assessment supports professional judgment. This application provides no independent fact verification, professional validation or certified ethical opinion. It does not certify compliance. User confirmation and reported external checking are not verification performed by this application. Optional AI assistance cannot change the rule-based ethical findings or verify facts. Separate audit-independence and other applicable professional requirements need their own assessment.", "",
     ]
     return "\n".join(lines).rstrip() + "\n"
