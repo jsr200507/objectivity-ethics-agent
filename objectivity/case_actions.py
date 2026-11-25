@@ -93,6 +93,26 @@ class ResidualFinding:
     third_party: str
 
 @dataclass(frozen=True)
+class SafeguardRecommendation:
+    threat_id: str
+    target: str
+    remit: str
+    primary: str
+    context: str
+    alternative: str
+    supporting: str
+    application: tuple[str, ...] = ()
+    supporting_actions: tuple[str, ...] = ()
+
+    @property
+    def considerations(self) -> tuple[str, ...]:
+        """Shared case context for the card and report, without parsing prose."""
+        return self.application or tuple(detail for detail in (self.remit, self.context) if detail) or (
+            f"This recommendation concerns {self.target}; further material facts may change the appropriate response.",
+        )
+
+
+@dataclass(frozen=True)
 class ActionAssessment:
     outcomes: tuple[ResidualFinding, ...]
     actions: tuple[ActionEvaluation, ...]
@@ -100,6 +120,8 @@ class ActionAssessment:
     third_party: str
     next_steps: tuple[str, ...]
     unknowns: tuple[str, ...]
+    recommendations: tuple[SafeguardRecommendation, ...] = ()
+    follow_up_steps: tuple[str, ...] = ()
 
 
 def _unique(values):
@@ -314,7 +336,7 @@ def action_questions(case: CaseState, snapshot: ReasoningSnapshot | None = None)
     return tuple(result)
 
 
-def _recommendation(case, threat, actions):
+def _recommendation_details(case, threat, actions):
     """Propose bounded, contextual options without recording or clearing actions."""
     from .case_reasoning import _is_no, _is_yes, _lookup, _unknown
     from .understanding import _authority_kind
@@ -335,43 +357,65 @@ def _recommendation(case, threat, actions):
     authority = {_authority_kind(fact.value) for fact in facts
                  if fact.predicate == "context" and fact.subject == "user"
                  and fact.decision_id == threat.decision_id and fact.status == "reported"}
+    application = []
     remit = f"Your recorded role is {role.value}. " if role else ""
     if ("Final approval authority", True) in authority and ("Final approval authority", False) not in authority:
         remit += "Submit findings and unresolved exceptions to an authorised decision-maker; your reported lack of final approval authority does not remove your professional responsibilities. "
+        application.append("Submit findings to an authorised decision-maker; you report no final approval authority.")
     elif ("Recommendation authority", False) in authority:
         remit += "Submit an evidence-based recommendation; final approval authority is not assumed. "
+        application.append("Submit an evidence-based recommendation within your recorded remit; final approval authority is not assumed.")
     elif responsibility and responsibility.value == "I prepare or assess the work":
         remit += "Prepare the analysis for an authorised decision-maker rather than assuming power to change approval arrangements. "
+        application.append("Prepare the analysis for an authorised decision-maker; do not assume authority to change approval arrangements.")
 
     valuation = "valuation" in decision.casefold()
     review_scope = ("the valuation's assumptions, methods and supporting evidence" if valuation
                     else f"the assumptions and supporting evidence for {decision}")
     alternative = "If suitable internal separation is unavailable, ask an authorised person to arrange competent external review, if accessible; its availability is not assumed."
     supporting = "Document professional disagreements, unresolved exceptions and their resolution before reliance; documentation supports the response but is not sufficient on its own."
+    supporting_actions = [
+        "Retain the assumptions and supporting evidence used in the professional judgment.",
+        "Document professional disagreements, unresolved exceptions and their resolution before reliance.",
+        "Record the reviewer's independence, competence, scope and response to findings where review is used.",
+    ]
     focus = ""
     if threat.kind == "Self-review":
-        primary = f"Obtain a fresh assessment of {review_scope} by someone who did not prepare the earlier work and can require changes; this challenges the previous judgment rather than relying on it as its own validation."
-        alternative = "Ask an authorised person to reassign the current assessment to someone outside the earlier work. " + alternative
+        primary = "Obtain a fresh assessment by someone who did not prepare the earlier work. Give the reviewer authority to require corrections."
+        alternative = "Ask an authorised person to reassign the assessment outside the earlier work. If internal separation is unavailable, consider competent external review where accessible."
         supporting = "Retain the original analysis and record how material assumptions and any required corrections were independently challenged."
+        application.append(f"Set the independent assessment's scope to {review_scope}.")
+        supporting_actions[0] = "Retain the original analysis and the independent challenges to its material assumptions."
     elif threat.kind == "Advocacy":
-        primary = f"Separate the recorded promotional or representative role from {decision}; have someone independent of the position promoted make or review the judgment."
-        alternative = "Withdraw from representing that position or ask an authorised person to reassign the objective assessment. " + alternative
+        primary = "Separate the promotional or representative role from the objective assessment. Assign the judgment to someone independent of the position promoted."
+        alternative = "Withdraw from representing the position or ask an authorised person to reassign the assessment. Consider accessible external review if internal separation is unavailable."
         supporting = "Provide the assessor with the underlying evidence, including evidence inconsistent with the position promoted, and record unresolved differences."
+        application.append(f"Separate the recorded advocacy from {decision}.")
+        supporting_actions[0] = "Give the assessor the underlying evidence, including evidence inconsistent with the position promoted."
     elif threat.kind == "Intimidation":
         influence = known("pressure_authority", threat.subject, "user")
         safety = known("challenge_safety", "user", threat.subject)
         changed = known("work_changed", "user", threat.subject)
-        primary = f"Arrange independent challenge of {review_scope} outside the reported pressure from {name}, with someone authorised to require reconsideration; this protects the judgment from the request."
+        primary = f"Arrange independent challenge of {review_scope}. Use someone outside {name}'s reported influence with authority to require reconsideration."
         if safety and safety.value == "I can challenge or escalate without adverse consequences":
-            alternative = "Use the reported safe challenge or escalation route to put the evidence and disagreement to an appropriate independent decision-maker; safe access is not an implemented safeguard."
+            alternative = "Use the reported safe challenge or escalation route to present the disagreement to an independent decision-maker. Access to that route is not evidence of an effective response."
+            application.append("Use the reported safe route to challenge the request; record the response rather than assuming protection.")
         else:
-            alternative = "Identify an appropriate independent channel outside the reported influence; if none is available internally, consider permitted confidential professional advice externally."
+            alternative = "Seek an independent channel outside the reported influence. If none is available internally, consider permitted confidential professional advice externally."
             if safety and safety.value == "No practicable route is known":
                 focus = "No practicable route is reported as known; this does not establish retaliation or that no route exists. "
             elif safety and safety.value == "Adverse consequences have been reported":
                 focus = "Reported adverse consequences make protection from the same source of influence particularly important; they remain unverified. "
             elif safety and safety.value == "I am concerned but no consequence has been stated":
                 focus = "Concern is reported without a stated adverse consequence; retaliation is not assumed. "
+            channel = (f"Seek a practicable route outside {name}'s reported work or career influence."
+                       if influence and influence.value in {"Directs or can override my work", "Influences performance assessment or career progression", "Both work and career influence"}
+                       else "Identify a practicable route for challenging the request; future pressure remains relevant.")
+            if safety and safety.value == "No practicable route is known":
+                channel += " No route is currently known; retaliation is not established."
+            elif safety and safety.value == "I am concerned but no consequence has been stated":
+                channel += " Concern alone does not establish an adverse consequence."
+            application.append(channel)
         if influence and influence.value in {"Directs or can override my work", "Influences performance assessment or career progression", "Both work and career influence"}:
             focus += f"Reported work or career influence makes a route controlled by {name} unsuitable as the sole protection. "
         elif influence and influence.value == "No such authority or influence":
@@ -379,55 +423,93 @@ def _recommendation(case, threat, actions):
         if _is_yes(changed):
             aspect = known("work_change_details", "user", threat.subject)
             supporting = "Independently reassess the reported affected work" + (f" ({aspect.value})" if aspect else "") + " before reliance, recording corrections and unresolved exceptions; a reported change is not proof of technical error."
+            supporting_actions[0] = "Independently reassess the reported affected work" + (f" ({aspect.value})" if aspect else "") + "; a reported change is not proof of technical error."
         elif _is_no(changed):
             focus += "No work change is reported; protect subsequent work without assuming past impairment. "
     elif threat.kind == "Familiarity":
-        primary = f"Arrange review of {review_scope} by someone outside the recorded relationship with {name}; independent challenge reduces loyalty-based influence on this judgment."
-        alternative = "Ask an authorised person to reassign the affected work outside that relationship if independent review is impracticable. " + alternative
+        primary = f"Arrange review of {review_scope} by someone outside the recorded relationship with {name}."
+        alternative = "Ask an authorised person to reassign the affected work outside that relationship. Consider accessible external review if suitable internal separation is unavailable."
         supporting = f"Disclose the relevant relationship with {name} to the person arranging the response and document its coverage; disclosure alone does not protect the judgment."
+        application.append(f"Keep {name}'s recorded connection separate from the professional assessment; participation in the work must not be assumed.")
+        supporting_actions[0] = f"Disclose the relevant relationship with {name} to the person arranging the response."
     else:  # The engine has already identified the specific Self-interest source.
         benefit = source.value if source else "the recorded incentive"
         organisation = party and party.kind in {"organisation", "organization"}
         if organisation and benefit == "Organisational financing or loan covenant interest":
-            primary = f"Arrange independent review of {review_scope} and separate the professional review and recommendation from financing or covenant negotiations; this limits how {name}'s financing incentive can steer the judgment."
+            primary = f"Arrange independent review of {review_scope}. Separate the professional review and recommendation from financing or covenant negotiations."
             consequence = known("financing_consequences", source.subject, source.object_id)
             if consequence and consequence.value == "No financing consequence identified":
                 focus = "No financing consequence is identified; keep the response proportionate while retaining the recorded organisational interest. "
+                application.append("Keep the response proportionate: no financing consequence is identified, but the organisational interest remains recorded.")
             elif consequence:
                 focus = f"The reported possibility ({consequence.value}) calls for separate assessment of the contractual position; it must not determine the professional judgment or be treated as a verified outcome. "
+                application.append(f"Assess the reported possibility ({consequence.value}) separately against the loan terms; it is not a verified outcome.")
+            else:
+                application.append("Check any covenant effect separately; the organisational interest alone does not establish a breach or a personal financial benefit.")
         elif organisation:
-            primary = f"Separate {decision} from decisions about {name}'s reported {benefit}; use a reviewer outside that incentive so commercial considerations do not determine the professional judgment."
+            primary = f"Separate the professional judgment from {name}'s commercial incentive. Use a reviewer outside that incentive."
+            application.append(f"Keep the reported {benefit} separate from {decision}.")
             dependence = known("commercial_dependence", source.subject, source.object_id) if source else None
             if dependence and dependence.value == "A major source of income or business":
                 focus = "Reported major commercial dependence makes a reviewer exposed to the same income pressure a weak alternative. "
         else:
             owner = "your" if threat.subject == "user" else f"{name}'s"
-            primary = f"Ask an authorised person whether {owner} reported incentive ({benefit}) can be removed or decoupled from {decision}; this removes the stake from the judgment rather than merely disclosing it."
-            alternative = "If changing the incentive is not feasible, reassign the affected judgment or obtain challenge by someone outside the benefit. " + alternative
+            primary = f"Ask an authorised person to remove or decouple {owner} reported incentive ({benefit}) from the affected judgment where feasible."
+            alternative = "Reassign the affected judgment or obtain challenge by someone outside the benefit if the incentive cannot be changed. Consider competent external review where accessible."
+            application.append(f"Consider the incentive's connection to {decision}; ownership and power to remove it must not be assumed.")
+            supporting_actions[2] = "Retain evidence of any change to the incentive, reassignment or independent challenge."
             if threat.subject != "user":
                 focus = f"The recorded benefit belongs to {name}; your ownership or ability to dispose of it is not assumed. "
 
     planned = next((action for action in actions if action.status == "Planned"), None)
     if planned:
+        application.append(f"Establish completion of the planned response: {planned.description}.")
         if planned.kind == "independent_review":
             focus = f"Obtain completion of {planned.description}; establish the reviewer's independence, competence and authority, its scope, resolution of findings and supporting records. " + focus
         else:
             focus = f"Establish completion and outcome of {planned.description}, with records of which source was controlled and when. " + focus
     elif any(action.failed for action in actions):
         focus = "Resolve the recorded unsuccessful or inadequate response with a different measure and explicit coverage and outcome evidence before relying on the judgment. " + focus
-    return f"For {target}. {remit}Primary: {primary} {focus}Alternative: {alternative} Supporting: {supporting}"
+        application.append("Replace the reported unsuccessful response before relying on the judgment.")
+    if not application:
+        application.append(f"Apply the response to {decision}; further material facts may change the appropriate response.")
+    return SafeguardRecommendation(
+        threat.id, target, remit.strip(), primary, focus.strip(), alternative, supporting,
+        tuple(application), tuple(supporting_actions),
+    )
+
+
+def _format_recommendation(recommendation: SafeguardRecommendation) -> str:
+    context = f" Context: {recommendation.context}" if recommendation.context else ""
+    remit = f"{recommendation.remit} " if recommendation.remit else ""
+    return (
+        f"For {recommendation.target}. {remit}Primary: {recommendation.primary}{context} "
+        f"Alternative: {recommendation.alternative} Supporting: {recommendation.supporting}"
+    )
+
+
+def _recommendation(case, threat, actions):
+    """Compatibility text projection for reports and existing callers."""
+    return _format_recommendation(_recommendation_details(case, threat, actions))
 
 
 def assess_actions(case: CaseState, snapshot: ReasoningSnapshot | None = None) -> ActionAssessment:
     """Recompute action effectiveness and residuals without trusting assertions."""
     snapshot = _reason(case, snapshot)
     action_results = tuple(_action_evaluation(case, action, snapshot) for action in case.actions)
-    outcomes, steps, all_gaps = [], [], []
+    outcomes, steps, all_gaps, recommendations, follow_up_steps = [], [], [], [], []
+
+    def add_follow_up(text):
+        # Preserve the legacy combined projection without asking consumers to
+        # distinguish recommendations by searching user-authored text.
+        follow_up_steps.append(text)
+        steps.append(text)
+
     evaluations = {evaluation.threat_id: evaluation for evaluation in snapshot.evaluations}
     needs_action_history = any(not _acceptable_conditions(case, evaluations.get(threat.id)) for threat in snapshot.threats)
     if not case.actions_reviewed and needs_action_history:
         all_gaps.append("Existing actions have not yet been reviewed; their absence from the account is not evidence that none were taken.")
-        steps.append("Establish what has already been done or planned, by whom and for which recorded sources of influence, before choosing additional responses.")
+        add_follow_up("Establish what has already been done or planned, by whom and for which recorded sources of influence, before choosing additional responses.")
     for threat in snapshot.threats:
         evaluation = evaluations.get(threat.id)
         linked = [action for action in action_results if threat.id in action.covered_threats]
@@ -443,7 +525,7 @@ def assess_actions(case: CaseState, snapshot: ReasoningSnapshot | None = None) -
             if linked:
                 reasons.append("The status and effectiveness of any recorded optional action remain distinct from the existing circumstances supporting this finding.")
             third_party = evaluation.third_party
-            steps.append(f"For {_target(case, threat)}, retain the recorded conditions supporting acceptability and reassess if the decision link or circumstances change; no additional safeguard is currently indicated.")
+            add_follow_up(f"For {_target(case, threat)}, retain the recorded conditions supporting acceptability and reassess if the decision link or circumstances change; no additional safeguard is currently indicated.")
         elif effective and not persistent:
             status = SUPPORTED
             descriptions = "; ".join(action.description for action in effective)
@@ -476,14 +558,16 @@ def assess_actions(case: CaseState, snapshot: ReasoningSnapshot | None = None) -
             if failed:
                 reasons.append("A reported unsuccessful measure or continuing influence is not overridden by another positive assertion.")
             third_party = f"A reasonable and informed third party would still need the missing implementation, coverage or outcome evidence for {_target(case, threat)} before concluding that Objectivity is appropriately protected."
-            steps.append(_recommendation(case, threat, linked))
+            recommendation = _recommendation_details(case, threat, linked)
+            recommendations.append(recommendation)
+            steps.append(_format_recommendation(recommendation))
         outcomes.append(ResidualFinding(threat.id, threat.kind, status, _unique(reasons), _unique(gaps), tuple(action.action_id for action in linked), third_party))
         all_gaps.extend(gaps)
     if not snapshot.threats:
         conclusion = "No potential threat is established from the available structured account within these rules. This is not assurance that threats are absent or that Objectivity is protected."
         if snapshot.questions:
             all_gaps.append("Material professional context remains to be clarified.")
-            steps.append("Clarify the material professional decision and circumstances selected by the current question, or retain the limitation explicitly.")
+            add_follow_up("Clarify the material professional decision and circumstances selected by the current question, or retain the limitation explicitly.")
     elif all(outcome.status in {SUPPORTED, ACCEPTABLE} for outcome in outcomes) and not all_gaps:
         if all(outcome.status == ACCEPTABLE for outcome in outcomes):
             conclusion = "The recorded circumstances conditionally support that the considered Objectivity threats are at an acceptable level. No additional safeguards are indicated on this account. Reassess if material facts change; this is not independent verification, automatic compliance or a certified ethical opinion."
@@ -494,4 +578,4 @@ def assess_actions(case: CaseState, snapshot: ReasoningSnapshot | None = None) -
     else:
         conclusion = "The available evidence does not yet establish that all identified Objectivity threats are at an acceptable level. Resolve the remaining material uncertainties and incomplete responses before relying on a positive conclusion."
     third_party = " ".join(outcome.third_party for outcome in outcomes) if outcomes else "There is not enough case-specific evidence for this application to provide assurance of Objectivity through the reasonable and informed third party test."
-    return ActionAssessment(tuple(outcomes), action_results, conclusion, third_party, _unique(steps), _unique(all_gaps))
+    return ActionAssessment(tuple(outcomes), action_results, conclusion, third_party, _unique(steps), _unique(all_gaps), tuple(recommendations), _unique(follow_up_steps))

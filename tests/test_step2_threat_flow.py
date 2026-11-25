@@ -178,7 +178,7 @@ class Step2QuestionTests(unittest.TestCase):
         self.assertTrue(reason_case(case).questions)
         report = build_case_report(case)
         self.assertIn('Question limit leaves unresolved', report)
-        self.assertIn('Step 2 question limit leaves unresolved', report.split('## I. Overall ethical conclusion')[1])
+        self.assertIn('Step 2 question limit leaves unresolved', report.split('## 3. Overall Conclusion')[1])
 
     def test_deferred_question_cannot_be_answered_beyond_budget(self):
         case = crowded_case()
@@ -263,12 +263,13 @@ class Step2PersistenceAndReportTests(unittest.TestCase):
     def test_preliminary_report_has_no_final_acceptable_level_verdict(self):
         case = start_case(SCENARIO)
         report = build_case_report(case)
-        early = report.split('## C. Threat evaluation')[1].split('## E. Actions taken')[0]
+        early = '\n'.join(re.findall(r'(?ms)^#### B\. EVALUATE\n(.*?)^#### C\. ADDRESS', report))
         self.assertNotIn('at an acceptable level', early.lower())
-        self.assertIn('Preliminary threat significance', early)
-        self.assertIn('no actual independent third party', early)
-        self.assertIn('commercial property', early.split('## D.')[1])
-        self.assertIn('Residual threats', report)
+        self.assertIn('Preliminary significance before safeguards', early)
+        self.assertIn('not an actual independent review', report)
+        self.assertIn('If the recorded account is accurate', early)
+        self.assertIn('commercial property', early)
+        self.assertIn('Residual position', report)
 
     def test_favourable_initial_circumstances_are_preliminary_but_final_residual_is_preserved(self):
         case = source_case()
@@ -276,10 +277,10 @@ class Step2PersistenceAndReportTests(unittest.TestCase):
         edit_case_fact(case, connection.id, 'No')
         review_case(case)
         report = build_case_report(case)
-        early = report.split('## C. Threat evaluation')[1].split('## E. Actions taken')[0]
+        early = '\n'.join(re.findall(r'(?ms)^#### B\. EVALUATE\n(.*?)^#### C\. ADDRESS', report))
         self.assertIn('Recorded circumstances narrow', early)
         self.assertNotIn('at an acceptable level', early.lower())
-        self.assertIn('At an acceptable level', report.split('## G. Residual threats')[1])
+        self.assertIn('At an acceptable level', report.split('#### C. ADDRESS')[1])
 
     def test_different_financing_and_pressure_answers_change_preliminary_factors_not_personal_ownership(self):
         case = start_case(SCENARIO)
@@ -545,7 +546,7 @@ class Step2RouteAndNeutralWordingTests(unittest.TestCase):
         self.assertEqual(before, case)
         self.assertEqual(residual, assess_actions(case))
         report = build_case_report(case)
-        preliminary = report.split('## C. Threat evaluation')[1].split('## E. Actions taken')[0]
+        preliminary = '\n'.join(re.findall(r'(?ms)^#### B\. EVALUATE\n(.*?)^#### C\. ADDRESS', report))
         self.assertIn('Potentially significant influence', preliminary)
         self.assertNotIn('Potential threat requiring a response', preliminary)
         self.assertNotIn('at an acceptable level', preliminary.lower())
@@ -630,14 +631,18 @@ class Step2StreamlitTests(unittest.TestCase):
 
     def assert_phase_order(self, expected_groups):
         text = self.ui.main_text_without_expanders()
-        groups = re.split(r'THREAT \d+ — ', text)[1:]
-        self.assertEqual(len(groups), expected_groups)
-        for group in groups:
-            identify = 'IDENTIFY — Clarify the threat'
-            evaluate = 'EVALUATE — Assess its significance'
-            self.assertEqual(group.count(identify), 1)
-            self.assertEqual(group.count(evaluate), 1)
-            self.assertLess(group.index(identify), group.index(evaluate))
+        threats = self.ui.reasoning().threats
+        self.assertEqual(len(threats), expected_groups)
+        for threat in threats:
+            self.assertIn(threat.kind, text)
+        plan = plan_questions(self.ui.case())
+        if plan.questions:
+            current = plan.questions[0]
+            stage = 'STAGE 1 — IDENTIFY' if current.phase == 'identify' else 'STAGE 2 — EVALUATE'
+            self.assertIn(stage, text)
+            self.assertIn('Current question:', self.ui.text())
+        else:
+            self.assertIn('All selected clarification questions have been answered', self.ui.text())
         self.assertLessEqual(len(self.ui.app.radio), 1)
 
     def restore_evaluation(self, case):
@@ -700,6 +705,71 @@ class Step2StreamlitTests(unittest.TestCase):
         self.assertEqual(before, self.ui.case())
         self.assertFalse(self.ui.app.radio)
         self.assertIn('Explicit Unknown answers and unresolved matters remain qualified', self.ui.text())
+
+    def test_interactive_unknown_and_explanation_are_preserved_across_phase_changes(self):
+        sample = start_case(SCENARIO)
+        connection = next(f for f in sample.facts if f.predicate == 'interest_connection')
+        edit_case_fact(sample, connection.id, connection.value, 'withdrawn')
+        self.restore_evaluation(sample)
+        first = plan_questions(self.ui.case()).questions[0]
+        self.assertEqual(first.phase, 'identify')
+        self.ui.answer_material('Yes', 'This link is my reported understanding of the agreement.')
+        self.assertEqual(plan_questions(self.ui.case()).questions[0].phase, 'evaluate')
+        current = plan_questions(self.ui.case()).questions[0]
+        explanation = 'The covenant terms have not been checked; authority is not established.'
+        self.ui.answer_material('Unknown', explanation)
+        answer = self.ui.case().answers[current.id]
+        self.assertEqual((answer.choice, answer.explanation), ('Unknown', explanation))
+        self.assertEqual(next(f.status for f in self.ui.case().facts if f.id == answer.fact_id), 'unknown')
+        next_question = plan_questions(self.ui.case()).questions[0]
+        self.assertEqual((next_question.predicate, next_question.phase), ('pressure_authority', 'identify'))
+        self.assertEqual(self.ui.app.radio[0].label, next_question.prompt)
+        self.assertEqual(len(self.ui.app.radio), 1)
+        self.ui.restore(self.ui.round_trip())
+        self.assertEqual(self.ui.case().answers[current.id].explanation, explanation)
+        self.assertEqual(self.ui.app.radio[0].label, next_question.prompt)
+        self.assertIsNone(self.ui.app.radio[0].value)
+
+    def test_unanswered_question_does_not_advance_or_invent_unknown(self):
+        self.ui.begin(SCENARIO)
+        self.ui.confirm_account()
+        current = plan_questions(self.ui.case()).questions[0]
+        before = deepcopy(self.ui.case())
+        self.ui.click('Record answer and continue')
+        self.assertEqual(before, self.ui.case())
+        self.assertEqual(self.ui.app.radio[0].label, current.prompt)
+        self.assertTrue(self.ui.app.warning)
+
+    def test_free_text_decision_unknown_keeps_identify_stage_and_explanation(self):
+        self.ui.begin('I need help with a professional issue.')
+        self.ui.confirm_account()
+        current = plan_questions(self.ui.case()).questions[0]
+        self.assertEqual((current.predicate, current.options), ('decision', ()))
+        self.assertIn('STAGE 1 — IDENTIFY', self.ui.main_text_without_expanders())
+        self.ui.widget('text_area', 'Additional explanation (optional)').input('The assignment has not been defined.')
+        self.ui.click('I do not know')
+        answer = self.ui.case().answers[current.id]
+        self.assertEqual((answer.choice, answer.explanation), ('Unknown', 'The assignment has not been defined.'))
+        self.assertFalse(plan_questions(self.ui.case()).questions)
+
+    def test_imported_older_budget_can_reopen_an_existing_slot_without_hiding_it(self):
+        sample = crowded_case()
+        seen = run_interview(sample)
+        sample.fact_history.append(CaseFact('answer-old-extra', 'user', 'context',
+                                           'Earlier imported answer', source='user', reviewed=True))
+        source = next(f for f in sample.facts if f.id in seen[0].depends_on and f.predicate == 'interest')
+        edit_case_fact(sample, source.id, 'Revised contingent fee')
+        self.restore_evaluation(sample)
+        plan = plan_questions(self.ui.case())
+        self.assertEqual(plan.answered_count, 8)
+        self.assertEqual(plan.questions[0].id, seen[0].id)
+        self.assertEqual(len(self.ui.app.radio), 1)
+        self.assertEqual(self.ui.app.radio[0].label, plan.questions[0].prompt)
+        self.assertIn('8 answers retained from earlier progress', self.ui.text())
+        self.ui.answer_material('Unknown', 'Still not established after correcting the source.')
+        self.assertEqual(plan_questions(self.ui.case()).answered_count, 8)
+        self.assertFalse(plan_questions(self.ui.case()).questions)
+        self.assertTrue(plan_questions(self.ui.case()).deferred)
 
 
 if __name__ == '__main__':

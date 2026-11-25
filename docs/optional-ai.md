@@ -114,7 +114,7 @@ model selects and orders approved, case-specific wording variants constructed
 from the current validated assessment. It cannot supply arbitrary prose, omit a
 required threat or action, invent a safeguard, upgrade implementation or replace
 the deterministic conclusion. Output inconsistent with the current case is
-rejected and the full nine-section rule-based report remains available. Material
+rejected and the full structured rule-based report remains available. Material
 facts or safeguard edits invalidate earlier overview selections.
 
 Ordinary structured answers are handled locally. This version does not send

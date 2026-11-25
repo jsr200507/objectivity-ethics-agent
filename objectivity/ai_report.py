@@ -2,7 +2,7 @@
 
 An external model may select approved wording variants and their order. It may
 not write arbitrary report prose, supply facts, or change the ethical finding.
-The complete deterministic report remains the authoritative nine-section report.
+The complete deterministic report remains the authoritative structured report.
 This deliberately limited language-planning boundary makes contradictions and
 fabricated safeguards rejectable without pretending to validate free prose.
 """

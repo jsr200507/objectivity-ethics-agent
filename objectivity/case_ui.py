@@ -151,93 +151,94 @@ def _findings(case, snapshot):
 
 
 def _material_question(case,snapshot,navigate,plan):
-    if plan.answered_count > MAX_STEP2_QUESTIONS:
-        st.caption(f'{plan.answered_count} answers retained from earlier progress. The current interview permits no further new questions beyond its seven-question limit.')
-    else:
-        st.caption(f'{plan.answered_count} of at most {MAX_STEP2_QUESTIONS} clarification questions answered · No minimum required.')
-    if not plan.questions:
-        if plan.limit_reached:
-            st.warning('The seven-question limit has been reached. Material issues remain unresolved below; the limit does not mean that the threats have been fully assessed.')
-        else:
-            st.info('The recorded answers are ready for a preliminary evaluation. Explicit Unknown answers and other material uncertainties remain limitations.')
+    """Present one decision-relevant follow-up as the main Step 2 interaction."""
+    st.subheader('Interactive clarification')
     q = plan.questions[0] if plan.questions else None
     current = next((t for t in snapshot.threats if q and t.id in q.threat_ids), None)
+
+    if plan.answered_count > MAX_STEP2_QUESTIONS:
+        st.caption(f'{plan.answered_count} answers retained from earlier progress. The current interview permits no further new questions beyond its seven-question limit.')
+    elif q:
+        question_number = min(plan.answered_count + 1, MAX_STEP2_QUESTIONS)
+        st.caption(f'QUESTION {question_number} OF {MAX_STEP2_QUESTIONS} · One question at a time')
+
     if q:
-        st.caption('Current question: ' + (current.kind + ' · ' if current else '') + q.phase.upper())
-    if q and current is None:
-        st.subheader('Establish the professional decision')
-        _material_question_form(case, q, navigate)
-    for index, threat in enumerate(snapshot.threats, 1):
-        st.subheader(f'THREAT {index:02} — {threat.kind.upper()}')
-        st.caption('THREAT IDENTIFIED · Source or beneficiary: ' + _actor(case, threat.subject))
-        st.write(threat.mechanism)
-        gaps = preliminary_assessment(case, snapshot, threat, plan).gaps
-        for phase, title in (
-            ('identify', 'STAGE 1 — IDENTIFY — Clarify the threat'),
-            ('evaluate', 'STAGE 2 — EVALUATE — Assess its significance'),
-        ):
-            st.write('**' + title + '**')
-            if threat == current and q.phase == phase:
-                _material_question_form(case, q, navigate)
-            elif any(threat.id in item.threat_ids and item.phase == phase for item in plan.deferred):
-                st.caption('The question limit leaves information unresolved for this phase; see the preliminary reasoning.')
-            elif any(threat.id in item.threat_ids and item.phase == phase for item in plan.questions):
-                st.caption('A relevant clarification is pending and will be asked in sequence; the assessment remains provisional.')
-            elif gaps:
-                st.caption('Relevant information already established in your account is reused; no further question is selected for this phase. Explicit Unknown answers and unresolved matters remain qualified below.')
-            else:
-                st.caption('The relevant information is already established in the recorded account; no further clarification is currently needed for this phase. This is not independent verification.')
-
-
-def _material_question_form(case, q, navigate):
-    """Render only the planner's single active question, without adding questions."""
-    with st.form(_key('material_question')):
-        if q.options:
-            choice=st.radio(q.prompt,q.options,index=None,key=_key('material_choice'))
+        if current:
+            st.caption('THREAT IDENTIFIED · ' + current.kind.upper() + ' · Source or beneficiary: ' + _actor(case, current.subject))
+            st.caption('Current question: ' + current.kind + ' · ' + q.phase.upper())
         else:
-            choice=st.text_input(q.prompt,max_chars=100_000)
-        st.write('**Why this question?** ' + q.why)
-        st.caption('How your answer could affect the evaluation: ' + q.impact)
-        explanation=st.text_area('Additional reported explanation (optional)',max_chars=45_000)
-        submit=st.form_submit_button('Record answer and reassess', type='primary')
-        unknown=st.form_submit_button('Unknown') if not q.options else False
-    if submit or unknown:
-        try: answer_case_question(case,q.id,'Unknown' if unknown else choice or '',explanation)
-        except ValueError as error: st.warning(str(error))
-        else: navigate(st.session_state.view)
+            st.markdown('**CLARIFY THE PROFESSIONAL DECISION**')
+        st.markdown('**STAGE ' + ('1 — IDENTIFY' if q.phase == 'identify' else '2 — EVALUATE') + '**')
+
+        with st.container(border=True):
+            with st.form(_key('material_question')):
+                if q.options:
+                    choice = st.radio(q.prompt, q.options, index=None, key=_key('material_choice'))
+                else:
+                    choice = st.text_input(q.prompt, max_chars=100_000)
+                st.markdown('**Why we are asking**')
+                st.write(q.why)
+                st.markdown('**How your answer may change the assessment**')
+                st.write(q.impact)
+                explanation = st.text_area('Additional explanation (optional)', max_chars=45_000)
+                submit = st.form_submit_button('Record answer and continue', type='primary')
+                unknown = st.form_submit_button('I do not know') if not q.options else False
+            if submit or unknown:
+                try:
+                    answer_case_question(case, q.id, 'Unknown' if unknown else choice or '', explanation)
+                except ValueError as error:
+                    st.warning(str(error))
+                else:
+                    navigate(st.session_state.view)
+
+        if q.phase == 'evaluate':
+            st.caption('Relevant information already established in your account is reused; this question addresses the remaining material gap.')
+        if any(set(q.threat_ids) & set(other.threat_ids) for other in plan.questions[1:]):
+            st.caption('A relevant clarification is pending and will be asked in sequence; the assessment remains provisional.')
+        st.caption('Your answer is recorded as reported information. It is not independently verified.')
+    elif plan.limit_reached:
+        st.warning('The seven-question limit has been reached. Material issues remain unresolved below; the limit does not mean that the threats have been fully assessed.')
+    else:
+        st.info('All selected clarification questions have been answered, or the recognised facts already provide the information needed for this stage.')
+        st.caption('Relevant information already established in the recorded account is reused; no further clarification is currently needed. This is not independent verification.')
+        st.caption('Explicit Unknown answers and unresolved matters remain qualified in the preliminary assessment.')
+
+    if plan.deferred:
+        st.caption(f'{len(plan.deferred)} additional material question(s) remain deferred because of the seven-question limit.')
 
 
 def _preliminary_findings(case, snapshot, plan):
-    st.subheader('Overall preliminary assessment' if not plan.questions else 'Preliminary findings so far')
-    st.caption('Significance before safeguards; these findings do not determine final residual acceptability.')
-    for threat in snapshot.threats:
+    st.subheader('Overall preliminary assessment')
+    st.caption('Significance is assessed before safeguards. It is not a final residual-acceptability conclusion.')
+    for index, threat in enumerate(snapshot.threats, 1):
         result = preliminary_assessment(case, snapshot, threat, plan)
-        st.write(f'**{threat.kind} involving {_actor(case,threat.subject)} — {result.significance}**')
-        if not plan.questions:
+        with st.container(border=True):
+            st.write(f'**THREAT {index:02} — {threat.kind}**')
             st.write(threat.mechanism)
-            # The complete factors remain available below without repeating
-            # every source paragraph in the main reading path.
-            for text in result.factors[:2]: st.write(text)
-        if result.gaps:
-            st.caption(f'{len(result.gaps)} material uncertainty or qualification(s) remain; see supporting reasoning.')
-        with st.expander(f'Supporting evidence and preliminary reasoning — {threat.kind} / {_actor(case,threat.subject)}'):
-            for text in result.factors: st.write(text)
-            for gap in result.gaps: st.write(gap)
-            for fid in threat.evidence_ids:
-                fact=next((f for f in case.facts if f.id==fid),None)
-                if fact:
-                    st.text(f'{_actor(case,fact.subject)}: {fact.value}')
-                    if fact.excerpt: st.text(f'Source: {fact.excerpt}')
-            st.write(result.third_party)
+            st.caption('Preliminary significance: ' + result.significance)
+            if result.gaps:
+                st.caption(f'{len(result.gaps)} material uncertainty or qualification(s) remain.')
+            with st.expander('Supporting evidence and reasoning — ' + threat.kind):
+                for text in result.factors:
+                    st.write(text)
+                for gap in result.gaps:
+                    st.write(gap)
+                for fid in threat.evidence_ids:
+                    fact = next((f for f in case.facts if f.id == fid), None)
+                    if fact:
+                        st.text(f'{_actor(case, fact.subject)}: {fact.value}')
+                        if fact.excerpt:
+                            st.text('Source: ' + fact.excerpt)
+                st.write(result.third_party)
     if not snapshot.threats:
         st.info('There is not enough supported information for a threat-specific evaluation, or no particular threat has been identified within these rules. This is not clearance to proceed.')
-    for text in snapshot.interactions: st.write(text)
-    st.caption('The reasonable and informed third party test asks how a reasonable person informed of the relevant circumstances would assess their influence on professional judgment. This is a conditional perspective, not an actual independent review.')
+    for text in snapshot.interactions:
+        st.write(text)
 
 
 def _action_editor(case,snapshot,navigate,*,expanded=False):
     from .case_actions import ACTION_CHECK_OPTIONS
-    with st.expander('Record or correct an existing or planned action', expanded=expanded):
+    with st.expander('Add or edit an action record', expanded=expanded):
         ids=['']+[a.id for a in case.actions]
         selected=st.selectbox('Action record',ids,index=1 if case.actions else 0,format_func=lambda id:next(a.description for a in case.actions if a.id==id) if id else 'Add another action',key=_key('select_action'))
         old=next((a for a in case.actions if a.id==selected),None)
@@ -288,51 +289,120 @@ def _action_editor(case,snapshot,navigate,*,expanded=False):
 def _address(case,snapshot,navigate):
     from .case_actions import assess_actions, action_questions
     from .case_reasoning import ACCEPTABLE
+    from .case_actions import SUPPORTED
+    from .case_presentation import status_summary, threat_overview
+
     st.header('Step 3: Address Threats')
-    st.write('What steps, if any, have you already taken to address these concerns?')
-    st.caption('Review existing actions before considering new responses. A proposal is not completed implementation, and implementation alone does not establish effectiveness.')
-    result=assess_actions(case,snapshot)
-    already_acceptable=bool(result.outcomes) and all(o.status==ACCEPTABLE for o in result.outcomes)
-    response_needed=bool(snapshot.threats) and not already_acceptable
-    if already_acceptable:
-        st.info('The recorded conditions support an acceptable level for the considered threats. No additional safeguards are currently indicated; review the reasons and reassess if those conditions change.')
-    elif not snapshot.threats:
-        st.info('No threat-specific safeguard is currently indicated by these findings. Missing or unrecognised information may still limit the assessment; this is not assurance that threats are absent.')
+    st.caption('Recommended responses are generated from the current Step 2 findings. They are options, not actions already taken or proof that a threat has been removed.')
+
+    result = assess_actions(case, snapshot)
+    st.info(status_summary(result))
+    outcomes = {outcome.threat_id: outcome for outcome in result.outcomes}
+    recommendations = {item.threat_id: item for item in result.recommendations}
+    response_needed = bool(snapshot.threats) and any(
+        outcome.status not in {ACCEPTABLE, SUPPORTED} for outcome in result.outcomes
+    )
+
+    if not snapshot.threats:
+        st.info('No threat-specific safeguard is indicated by the current findings. Missing or unrecognised information may still limit the assessment; this is not assurance that threats are absent.')
+    else:
+        st.subheader('Recommended safeguards')
+        for index, threat in enumerate(snapshot.threats, 1):
+            outcome = outcomes.get(threat.id)
+            with st.container(border=True):
+                st.markdown(f'### {index:02} · {threat.kind}')
+                if outcome:
+                    st.caption('Current residual position: ' + outcome.status)
+                st.markdown('**Problem identified**')
+                problem, relevance = threat_overview(case, threat)
+                st.write(problem)
+
+                st.markdown('**Why it matters**')
+                st.write(relevance)
+
+                if outcome and outcome.status == ACCEPTABLE:
+                    st.success('No additional safeguard is currently indicated on the recorded circumstances.')
+                elif outcome and outcome.status == SUPPORTED:
+                    st.success('The recorded action evidence conditionally supports the response for this threat.')
+                else:
+                    recommendation = recommendations.get(threat.id)
+                    if recommendation:
+                        st.markdown('**Primary safeguard**')
+                        st.write(recommendation.primary)
+                        st.markdown('**Case-specific application**')
+                        for detail in recommendation.considerations:
+                            st.write('- ' + detail)
+                        st.markdown('**Alternative safeguard**')
+                        st.write(recommendation.alternative)
+                        st.markdown('**Supporting actions and evidence**')
+                        for detail in recommendation.supporting_actions or (recommendation.supporting,):
+                            st.write('- ' + detail)
+                    else:
+                        st.caption('A case-specific recommendation is not available from the current rule set; retain the unresolved limitation and seek appropriate professional guidance.')
+
+                if outcome:
+                    with st.expander('Residual assessment and unresolved points'):
+                        for reason in outcome.reasoning:
+                            st.write(reason)
+                        if outcome.unknowns:
+                            st.markdown('**Information still unresolved**')
+                            for gap in outcome.unknowns:
+                                st.write(gap)
+                        st.caption(outcome.third_party)
+
+    st.divider()
+    st.subheader('Existing or planned actions')
+    st.caption('This review comes after the recommended responses. Record actions already mentioned in the scenario or any additional measure you have taken; a proposal is not completed implementation.')
+
     for action in case.actions:
-        st.write(f'**{action.description}**'); st.caption(f'Reported status: {action.stage} · {_ACTION_LABELS.get(action.kind,"Other action")}')
-        if not action.reviewed: st.caption('Review the reported status and which circumstances this action covers.')
+        st.write(f'**{action.description}**')
+        st.caption(f'Reported status: {action.stage} · {_ACTION_LABELS.get(action.kind, "Other action")}')
+        if not action.reviewed:
+            st.caption('The reported status and the circumstances covered still need review.')
+
     if not case.actions_reviewed and response_needed:
-        st.info('Record a relevant action below, or select its absence or uncertainty. An action not mentioned in the scenario is not assumed to be absent.')
-        if st.button('No relevant action has been taken'):
-            save_case_action(case,'No relevant action has been taken','none','Not Taken',[t.id for t in snapshot.threats])
-            navigate('case_address')
-        if st.button('Existing actions are not known'):
-            case.actions_reviewed=True; case.revision+=1
-            case.history.append(CaseHistory('Existing actions','Unknown',revision=case.revision))
-            navigate('case_address')
-    questions=action_questions(case,snapshot)
+        if not case.actions:
+            st.caption('If no action has been taken, or the action history cannot be confirmed, record that here. The application will not assume either answer.')
+            left, right = st.columns(2)
+            with left:
+                if st.button('No relevant action has been taken'):
+                    save_case_action(case, 'No relevant action has been taken', 'none', 'Not Taken',
+                                     [t.id for t in snapshot.threats])
+                    navigate('case_address')
+            with right:
+                if st.button('Existing actions are not known'):
+                    case.actions_reviewed = True
+                    case.revision += 1
+                    case.history.append(CaseHistory('Existing actions', 'Unknown', revision=case.revision))
+                    navigate('case_address')
+        else:
+            st.caption('Actions already mentioned in the scenario are shown above. Review or correct their status and coverage below.')
+
+    questions = action_questions(case, snapshot)
     if questions:
-        q=questions[0]
-        st.subheader('Evidence that could change the residual assessment')
+        q = questions[0]
+        st.markdown('**Evidence follow-up for a recorded action**')
         with st.form(_key('action_question')):
-            choice=st.radio(q.prompt,q.options,index=None) if q.options else st.text_input(q.prompt,max_chars=100_000)
-            st.write('**Why this action question?** ' + q.why)
-            submit=st.form_submit_button('Record action evidence',type='primary')
-            unknown=st.form_submit_button('Unknown') if not q.options else False
+            if q.options:
+                choice = st.radio(q.prompt, q.options, index=None)
+            else:
+                choice = st.text_area(q.prompt, max_chars=100_000)
+            st.caption('Why this evidence matters: ' + q.why)
+            submit = st.form_submit_button('Record action evidence', type='primary')
+            unknown = st.form_submit_button('Unknown') if not q.options else False
         if submit or unknown:
-            try: answer_action_question(case,q.id,'Unknown' if unknown else choice or '')
-            except ValueError as error: st.warning(str(error))
-            else: navigate('case_address')
-    _action_editor(case,snapshot,navigate,expanded=response_needed and (not case.actions_reviewed or any(not a.reviewed for a in case.actions)))
-    st.subheader('Current protection and next steps')
-    for outcome in result.outcomes:
-        st.write(f'**{outcome.kind}: {outcome.status}**')
-        for text in outcome.reasoning: st.write(text)
-        for gap in outcome.unknowns: st.caption(gap)
-    st.write(result.conclusion)
-    for step in result.next_steps: st.write(f'• {step}')
-    if st.button('Generate Objectivity report',type='primary'): navigate('case_report')
-    if st.button('Return to evaluation'): navigate('case_evaluate')
+            try:
+                answer_action_question(case, q.id, 'Unknown' if unknown else choice or '')
+            except ValueError as error:
+                st.warning(str(error))
+            else:
+                navigate('case_address')
+
+    _action_editor(case, snapshot, navigate, expanded=bool(case.actions))
+    if st.button('Generate Objectivity report', type='primary'):
+        navigate('case_report')
+    if st.button('Return to evaluation'):
+        navigate('case_evaluate')
 
 
 def render_case(assessment,navigate):

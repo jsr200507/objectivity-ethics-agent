@@ -138,17 +138,16 @@ class RefinedAddressReportTests(unittest.TestCase):
     def test_report_keeps_identify_evaluate_address_even_without_new_safeguard(self):
         case = unrelated_interest_case()
         report = build_case_report(case)
-        for stage in ('IDENTIFY —', 'EVALUATE —', 'ADDRESS —'):
+        for stage in ('#### A. IDENTIFY', '#### B. EVALUATE', '#### C. ADDRESS'):
             self.assertIn(stage, report)
-        self.assertIn('## E. Actions taken and proposed', report)
-        self.assertIn('## F. Safeguard effectiveness', report)
-        self.assertIn('## G. Residual threats', report)
+        self.assertIn('Implementation status and effectiveness', report)
+        self.assertIn('Residual position', report)
         self.assertIn('Self\\-interest', report)
         self.assertIn('At an acceptable level', report)
-        self.assertIn('Existing conditions supporting acceptability', report)
-        self.assertIn('no additional safeguard is indicated', report)
+        self.assertIn('The finding rests on existing conditions', report)
+        self.assertIn('no additional safeguard is indicated', report.lower())
         self.assertIn('Decision outcome affects the reported interest: No', report)
-        self.assertIn('does not imply that an unrecorded safeguard was implemented', report)
+        self.assertIn('not an assumed completed safeguard', report)
         self.assertNotIn('No action effectiveness can be established from an unspecified action history', report)
 
     def test_report_distinguishes_optional_action_status_from_conditions(self):
@@ -156,7 +155,7 @@ class RefinedAddressReportTests(unittest.TestCase):
         action(case, checks={}, evidence='')
         report = build_case_report(case)
         self.assertIn('not relied upon for the acceptable', report)
-        self.assertNotIn('Evidence or coverage still needed:', report)
+        self.assertNotIn('Implementation or effectiveness evidence still needed:', report)
         self.assertNotIn(EFFECTIVE, report)
 
     def test_recommendations_are_not_claimed_as_completed_safeguards(self):
@@ -164,7 +163,7 @@ class RefinedAddressReportTests(unittest.TestCase):
         report = build_case_report(case)
         self.assertIn('recommendations, not completed safeguards', report)
         self.assertIn('inventory write', report)
-        self.assertIn('## H. Prioritised next steps', report)
+        self.assertIn('**Primary safeguard:**', report)
         self.assertNotIn('**Recorded stage:** Implemented', report)
 
     def test_material_edit_updates_report_and_preserves_earlier_source(self):

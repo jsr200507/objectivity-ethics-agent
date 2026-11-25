@@ -53,7 +53,7 @@ verification details](docs/optional-ai.md).
 Initial assistance produces structured, evidence-linked candidate records for
 Step 1 review. Optional report assistance selects and orders approved,
 case-specific wording variants; it does not perform unrestricted report rewriting
-or replace the full nine-section deterministic report. Invalid output, timeouts,
+or replace the complete structured deterministic report. Invalid output, timeouts,
 rate limits and exhausted allowances retain local functionality and progress.
 The normal opted-in target is one understanding request and one optional overview
 request, with a configurable hard maximum of three attempts per assessment.
@@ -82,9 +82,10 @@ Threats → Step 3: Address Threats → Final Ethical Assessment Report**
 3. In **Step 2: Identify & Evaluate Threats**, the active material question is the
    main interaction. Questions are grouped by their specific threat and source:
    **IDENTIFY — Clarify the threat**, then **EVALUATE — Assess its significance**,
-   before moving to the next threat. Each explains **Why this question?**
-   and how the answer could affect the evaluation. Select **Record answer and
-   reassess** to update the findings. Known facts are reused; an explicit
+   before moving to the next threat. Only one question is active, with its
+   current stage, **Why we are asking**, and how the answer may change the
+   assessment. Select **Record answer and continue** to record the choice and
+   optional explanation, then recalculate the next question. Known facts are reused; an explicit
    **Unknown** remains a limitation and is not repeatedly asked. Where no material
    clarification is needed, the app explains the evaluation without inventing a
    question. There is no minimum and at most seven distinct clarification questions
@@ -98,9 +99,16 @@ Threats → Step 3: Address Threats → Final Ethical Assessment Report**
    or in the report's preliminary evaluation and third-party sections.
    Use **Review scenario summary** to revisit the account. Material corrections
    return to Step 1 for confirmation and recalculate dependent findings.
-5. Select **Review existing actions** to open **Step 3: Address Threats**:
-   “What steps, if any, have you already taken to address these concerns?” Actions
-   recognised in the scenario are prefilled for review. Describe an action and
+5. Select **Review existing actions** to open **Step 3: Address Threats**.
+   Each threat has a separate card with a primary safeguard, case-specific
+   application (at most three bullets), an alternative, and supporting actions
+   and evidence (two to four bullets). A concise status counts threats still
+   needing action or evidence. Recommendations use structured data shared
+   with each threat's Address subsection in the report;
+   they are not records of implemented safeguards. Existing conditions or
+   supported actions that already address a threat do not force a new measure.
+   Under **Existing or planned actions**, actions recognised in the scenario
+   are prefilled for review. Use **Add or edit an action record** to describe an action and
    explicitly choose its type, status and threat coverage rather than repeating
    facts already recorded. **No relevant action has been taken** and **Existing
    actions are not known** are available where relevant.
@@ -228,22 +236,21 @@ It does not force new safeguards for those sources. A different unresolved or
 unacceptable threat still needs its own response; protection of one source cannot
 clear the whole case.
 
-The Markdown report preserves the complete reasoning chain. Its nine sections
-include explicit **IDENTIFY**, **EVALUATE** and **ADDRESS** labels:
+The Markdown report has three numbered sections:
 
-- Scenario summary and reported context.
-- Identified potential Objectivity threats and supporting sources.
-- Threat evaluation and combined influences.
-- Reasonable and informed third party assessment.
-- Existing and planned actions, recommended responses, and any justified basis
-  for no additional safeguards.
-- Safeguard effectiveness and remaining evidence gaps.
-- Residual threats.
-- Prioritised next steps.
-- Overall conditional ethical conclusion and limitations.
+1. **Executive Summary:** current threat position, principal concerns, professional recommendation,
+   role, activity and relevant parties.
+2. **Threat-by-Threat Assessment:** each source has its own **IDENTIFY →
+   EVALUATE → ADDRESS** sequence, keeping evidence, preliminary significance,
+   the hypothetical third-party test, structured recommendations, recorded
+   implementation, effectiveness and residual findings together.
+3. **Overall Conclusion:** the complete unchanged engine conclusion, unresolved
+   threats, effective actions, further conditions and remaining limitations.
 
-An actions/safeguards section is always present, including when no new safeguards
-are indicated. It explains the existing conditions supporting that result.
+Every threat retains its Address subsection, including when existing conditions
+or supported actions mean no additional safeguard is indicated. Shared action
+evidence is cross-referenced; implementation status and effectiveness remain
+visible for each linked threat. Unmapped action records are retained separately.
 Recommended but unimplemented measures remain distinct from completed actions.
 
 Reports are recomputed from current source records and use professional wording,
@@ -382,7 +389,8 @@ or that every browser or embedding supports the storage component.
   updates and explicit conversion of legacy progress.
 - `objectivity/case_actions.py`: conditional evidence questions, action
   effectiveness, residual threats and case-specific recommendations.
-- `objectivity/case_report.py`: current-snapshot nine-section Markdown report.
+- `objectivity/case_report.py`: current-snapshot structured professional report.
+- `objectivity/case_presentation.py`: concise card explanations and status counts.
 - `objectivity/case_summary.py`: pure, bounded projection of existing case records
   into six readable summary sections; it does not perform new extraction or
   ethical reasoning and does not discard the detailed sources.
