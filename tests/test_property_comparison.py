@@ -199,6 +199,27 @@ class PropertyComparisonTests(unittest.TestCase):
         result = self.source('My brother works for Cedar Valuations. I do not know whether he participated in the valuation.')
         self.assertEqual([(f.subject, f.value) for f in self.facts(result, 'participation')], [('family_brother', 'Unknown')])
 
+    def test_undecided_safeguard_menu_is_not_an_action_record(self):
+        scenario = (
+            'I review the property valuation prepared by Cedar Valuations. '
+            'I need to decide whether to approve the valuation as presented, '
+            'request further supporting evidence and challenge the assumptions, '
+            'or disclose the relevant interests and arrange an independent review of the valuation.'
+        )
+        case = start_case(scenario)
+        self.assertEqual(case.actions, [])
+        self.assertIn('valuation', case.scenario)
+
+    def test_genuine_planned_independent_review_is_still_recorded(self):
+        scenario = (
+            'I review a property valuation. '
+            'I plan to arrange an independent review of the valuation.'
+        )
+        case = start_case(scenario)
+        self.assertEqual(len(case.actions), 1)
+        self.assertEqual(case.actions[0].kind, 'independent_review')
+        self.assertEqual(case.actions[0].stage, 'Planned')
+
     def test_comparison_journey_does_not_repeat_supplied_unknown_or_ask_technical_valuation_questions(self):
         case = start_case(PROPERTY_COMPARISON)
         review_case(case)

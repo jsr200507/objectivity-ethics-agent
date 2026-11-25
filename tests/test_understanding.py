@@ -260,6 +260,21 @@ class UnderstandingTests(unittest.TestCase):
         self.assertFalse(clean.facts)
         self.assertTrue(clean.limitations)
 
+    def test_validation_rejects_ai_suggested_action_from_undecided_choice(self):
+        source = (
+            'I need to decide whether to approve the valuation, request more evidence, '
+            'or arrange an independent review.'
+        )
+        result = UnderstandingResult(
+            (CaseActor('user', 'You'),),
+            (),
+            (CaseAction('a', source, 'independent_review', 'Planned',
+                        source='scenario', excerpt=source),),
+        )
+        clean = validate_understanding(source, result)
+        self.assertFalse(clean.actions)
+        self.assertTrue(clean.limitations)
+
     def test_validation_cannot_confer_review_or_effectiveness(self):
         source='I requested an independent review.'
         result=UnderstandingResult(
