@@ -37,6 +37,24 @@ class CedarExactFreshCaseRegressionTests(unittest.TestCase):
         actions = next(part for part in summary if part.title == 'Actions already mentioned')
         self.assertIn('No steps to address', ' '.join(actions.items))
 
+    def test_original_case_keeps_explicit_employment_and_promotion(self):
+        case = start_case(CEDAR_CASE)
+        interests = [f for f in case.facts if f.predicate == 'interest']
+        self.assertTrue(any(f.subject == 'user' and 'Promotion' in f.value for f in interests))
+        employment = [f for f in case.facts if f.predicate == 'employment']
+        self.assertTrue(any(f.subject == 'family_brother' for f in employment))
+        people = next(s for s in summarise_case(case) if s.title == 'People and relationships')
+        details = ' '.join(people.items)
+        self.assertIn('Your brother at Cedar Valuations', details)
+        parties = details.split('Relevant parties: ', 1)[-1].split('You with', 1)[0]
+        self.assertNotIn('; External valuation firm;', parties)
+
+    def test_original_case_does_not_repeat_unattributed_claim_label(self):
+        case = start_case(CEDAR_CASE)
+        uncertainties = next(s for s in summarise_case(case) if s.title == 'Material uncertainties')
+        details = ' '.join(uncertainties.items)
+        self.assertNotIn('Unattributed reported claim remains unverified: Unattributed reported claim', details)
+
     def test_new_case_retains_career_and_familiarity_questions(self):
         case = start_case(CEDAR_CASE)
         asked = {q.predicate for q in plan_questions(case).questions}
