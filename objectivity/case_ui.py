@@ -446,7 +446,12 @@ def render_case(assessment,navigate):
         st.write('Explore the possible influences on your judgment and how significant they are. A potential threat is not proven bias or misconduct.')
         plan=plan_questions(case,snapshot)
         _material_question(case,snapshot,navigate,plan)
-        _preliminary_findings(case,snapshot,plan)
+        if plan.questions:
+            with st.expander('Preview provisional assessment (optional)', expanded=False):
+                st.caption('This is a live, pre-safeguard view based on the answers recorded so far; it is not a final verdict.')
+                _preliminary_findings(case,snapshot,plan)
+        else:
+            _preliminary_findings(case,snapshot,plan)
         if plan.questions:
             st.caption('If you continue to existing actions now, unanswered material questions remain unresolved in the assessment and report.')
         if st.button('Review existing actions',type='primary'): navigate('case_address')

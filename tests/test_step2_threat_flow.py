@@ -340,6 +340,37 @@ class Step2FamilyAndCareerTests(unittest.TestCase):
         self.assertEqual((seen[2].subject, seen[2].phase), ('family_brother', 'evaluate'))
         self.assertTrue(all('Unknown' in q.options and q.why and q.impact for q in seen))
 
+    def test_realistic_first_person_cedar_asks_career_and_contact_questions(self):
+        scenario = (
+            'I am a financial accountant at a property investment company. '
+            'I am responsible for reviewing a property valuation prepared by an external valuation firm, Cedar Valuations. '
+            'Cedar Valuations has valued one of our investment properties at approximately £18 million. '
+            'Our investment director has asked me to accept the valuation without challenging optimistic rental growth assumptions. '
+            'The company is currently arranging refinancing, and meeting a loan covenant depends on the property value. '
+            'There is also a personal career-related interest. '
+            'My promotion depends on approving the property valuation, which may influence my willingness to challenge the assumptions. '
+            'My brother works for Cedar Valuations, the external firm that prepared the valuation. '
+            'However, I do not know whether he was involved in preparing or reviewing this particular valuation.'
+        )
+        case = start_case(scenario)
+        questions = plan_questions(case).questions
+        predicates = [q.predicate for q in questions]
+        self.assertIn('career_incentive_basis', predicates)
+        self.assertIn('familiarity_contact', predicates)
+        self.assertNotIn('participation', predicates)
+        self.assertLessEqual(len(questions), MAX_STEP2_QUESTIONS)
+        contact = next(q for q in questions if q.predicate == 'familiarity_contact')
+        self.assertEqual(contact.phase, 'evaluate')
+        self.assertEqual(contact.subject, 'family_brother')
+
+    def test_unrelated_generic_valuation_provider_does_not_trigger_contact(self):
+        case = start_case(
+            'I am an accountant reviewing a valuation prepared by an external valuation firm. '
+            'My brother works for Cedar Valuations. '
+            'I do not know whether he participated in preparing the valuation.'
+        )
+        self.assertNotIn('familiarity_contact', [q.predicate for q in plan_questions(case).questions])
+
     def test_contact_is_conditional_on_a_scoped_identification_answer(self):
         scenario = PROPERTY_COMPARISON.replace(' You do not know whether he participated in the valuation.', '')
         for choice in ('Yes', 'No', 'Unknown'):
@@ -727,6 +758,8 @@ class Step2StreamlitTests(unittest.TestCase):
             self.assertIn(q.why, text)
             self.assertIn(q.impact, text)
             self.assertNotIn('at an acceptable level', self.ui.text().lower())
+            self.assertIn('Preview provisional assessment (optional)', [item.label for item in self.ui.app.expander])
+            self.assertNotIn('Overall preliminary assessment', text)
             seen.append(q.predicate)
             self.ui.answer_material('Yes' if q.predicate == 'work_changed' else 'Unknown')
         self.assertEqual(len(seen), 5)
